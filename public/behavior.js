@@ -140,6 +140,34 @@ function bstate(){
   if(!sem.behavior)sem.behavior=emptyBehaviorState();
   return sem.behavior;
 }
+function behaviorReportPeriod(kind){
+  var prefix=kind==="positive"?"behPositive":"behRecord",yearEl=document.getElementById(prefix+"Year"),semesterEl=document.getElementById(prefix+"Semester");
+  var academicYear=yearEl&&db.academicYears[yearEl.value]?yearEl.value:db.activeAcademicYear;
+  var semester=semesterEl&&["1","2","both"].includes(semesterEl.value)?semesterEl.value:String(db.activeSemester||"1");
+  return{academicYear:academicYear,semester:semester,semesters:semester==="both"?["1","2"]:[semester],yearData:db.academicYears[academicYear]||{classes:{},students:{},semesters:{}}};
+}
+function behaviorSemesterLabel(period){return period.semester==="both"?tr("الفصلان الأول والثاني","Semesters 1 & 2"):tr(period.semester==="1"?"الفصل الأول":"الفصل الثاني","Semester "+period.semester);}
+function behaviorReportClasses(kind){
+  var period=behaviorReportPeriod(kind),programs=allowedPrograms(),grades=allowedGrades();
+  return Object.values(period.yearData.classes||{}).map(normalizeClassScope).filter(function(c){return c.program===db.activeProgram&&programs.includes(c.program)&&grades.includes(classGrade(c));});
+}
+function allowedBehaviorReportRecord(record,period){
+  var cls=period.yearData.classes&&period.yearData.classes[record.classId],program=record.program||(cls&&normalizeClassScope(cls).program)||db.activeProgram,grade=String(record.grade||(cls&&classGrade(cls))||"");
+  return program===db.activeProgram&&allowedPrograms().includes(program)&&(!grade||allowedGrades().includes(grade));
+}
+function behaviorReportRecords(kind){
+  var period=behaviorReportPeriod(kind),field=kind==="positive"?"positives":"violations",records=[];
+  period.semesters.forEach(function(semester){
+    var behavior=period.yearData.semesters&&period.yearData.semesters[semester]&&period.yearData.semesters[semester].behavior;
+    (behavior&&behavior[field]||[]).forEach(function(record){if(allowedBehaviorReportRecord(record,period))records.push(Object.assign({},record,{__reportYear:period.academicYear,__reportSemester:semester,__yearData:period.yearData}));});
+  });
+  return records;
+}
+function behaviorReportStudent(record){return record.__yearData&&record.__yearData.students&&record.__yearData.students[record.studentId]||studentFor(record.studentId);}
+function behaviorReportClass(record){return record.__yearData&&record.__yearData.classes&&record.__yearData.classes[record.classId]||classFor(record.classId);}
+function behaviorReportStudentName(record){return behaviorReportStudent(record).name||record.studentName||"—";}
+function behaviorReportClassName(record){var cls=behaviorReportClass(record);return cls&&Object.keys(cls).length?className(cls):record.className||"—";}
+function behaviorReportEditable(kind){var period=behaviorReportPeriod(kind);return period.academicYear===db.activeAcademicYear&&period.semester===String(db.activeSemester);}
 function visibleClassIds(){return new Set(visibleClasses().map(function(c){return c.id;}));}
 function allowedBehaviorRecord(record){
   var ids=visibleClassIds();
@@ -210,7 +238,7 @@ function buildNavigation(){
     navItem("behavior-log","⚠️","تسجيل مخالفة","Record Violation","behavior_record")+
     navItem("behavior-positive","⭐","السلوك الإيجابي","Positive Behavior","behavior_record")+
     "<div class='nav-sec' data-ar='السجلات والتقارير' data-en='Records & Reports'>السجلات والتقارير</div>"+
-    navItem("behavior-records","📋","السجل الكامل","Complete Register","behavior_manage")+
+    navItem("behavior-records","📋","سجل المخالفات","Violations Report","behavior_reports")+
     navItem("behavior-positive-report","📊","تقرير السلوك الإيجابي","Positive Report","behavior_reports")+
     "<div class='nav-sec' data-ar='الأدلة' data-en='Guides'>الأدلة</div>"+
     navItem("behavior-procedures","📌","التدخلات والإجراءات","Interventions","behavior_reference")+
@@ -264,8 +292,10 @@ function buildPages(){
   "</div>";
 
   html+="<div class='page behavior-page' id='page-behavior-records'>"+
-    "<div class='behavior-hero'><div><h3 data-ar='السجل الكامل للمخالفات' data-en='Complete Violations Register'>السجل الكامل للمخالفات</h3><p data-ar='البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.' data-en='Search, filter, edit, print, and export within the signed-in user scope.'>البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' data-behavior-permission='export' onclick=\"exportBehaviorExcel('violations')\">📗 <span data-ar='Excel' data-en='Excel'>Excel</span></button><button class='beh-btn beh-btn-gold' onclick=\"printBehaviorReport('violations')\">🖨️ <span data-ar='طباعة' data-en='Print'>طباعة</span></button></div></div>"+
+    "<div class='behavior-hero'><div><h3 data-ar='السجل الكامل للمخالفات' data-en='Complete Violations Register'>السجل الكامل للمخالفات</h3><p data-ar='البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.' data-en='Search, filter, edit, print, and export within the signed-in user scope.'>البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' data-behavior-permission='behavior_reports' onclick=\"exportBehaviorExcel('violations')\">📗 <span data-ar='Excel' data-en='Excel'>Excel</span></button><button class='beh-btn beh-btn-gold' data-behavior-permission='behavior_reports' onclick=\"printBehaviorReport('violations')\">🖨️ <span data-ar='طباعة' data-en='Print'>طباعة</span></button></div></div>"+
     "<div class='beh-filters'>"+
+      "<div class='beh-filter'><label data-ar='السنة الدراسية' data-en='Scholastic Year'>السنة الدراسية</label><select id='behRecordYear' onchange=\"changeBehaviorReportPeriod('violations')\"></select></div>"+
+      "<div class='beh-filter'><label data-ar='الفصل الدراسي' data-en='Semester'>الفصل الدراسي</label><select id='behRecordSemester' onchange=\"changeBehaviorReportPeriod('violations')\"></select></div>"+
       "<div class='beh-filter'><label data-ar='بحث' data-en='Search'>بحث</label><input id='behRecordSearch' oninput='renderBehaviorRecords()' placeholder=''></div>"+
       "<div class='beh-filter'><label data-ar='الفصل' data-en='Class'>الفصل</label><select id='behRecordClass' onchange='renderBehaviorRecords()'></select></div>"+
       "<div class='beh-filter'><label data-ar='الدرجة' data-en='Level'>الدرجة</label><select id='behRecordLevel' onchange='renderBehaviorRecords()'></select></div>"+
@@ -297,8 +327,8 @@ function buildPages(){
   "</div>";
 
   html+="<div class='page behavior-page' id='page-behavior-positive-report'>"+
-    "<div class='behavior-hero'><div><h3 data-ar='تقرير السلوك الإيجابي' data-en='Positive Behavior Report'>تقرير السلوك الإيجابي</h3><p data-ar='تحليل شامل للسلوك الإيجابي وبطاقات الطلاب.' data-en='Comprehensive analysis of positive behavior and student cards.'>تحليل شامل للسلوك الإيجابي وبطاقات الطلاب.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' data-behavior-permission='export' onclick=\"exportBehaviorExcel('positive')\">📗 Excel</button><button class='beh-btn beh-btn-gold' onclick=\"printBehaviorReport('positive')\">🖨️ <span data-ar='طباعة' data-en='Print'>طباعة</span></button></div></div>"+
-    "<div class='beh-filters'><div class='beh-filter'><label data-ar='بحث' data-en='Search'>بحث</label><input id='behPositiveSearch' oninput='renderPositiveReport()'></div><div class='beh-filter'><label data-ar='الفصل' data-en='Class'>الفصل</label><select id='behPositiveFilterClass' onchange='renderPositiveReport()'></select></div><div class='beh-filter'><label data-ar='نوع السلوك' data-en='Behavior Type'>نوع السلوك</label><select id='behPositiveFilterType' onchange='renderPositiveReport()'></select></div><div class='beh-filter'><label data-ar='من تاريخ' data-en='From Date'>من تاريخ</label><input type='date' id='behPositiveFrom' onchange='renderPositiveReport()'></div><div class='beh-filter'><label data-ar='إلى تاريخ' data-en='To Date'>إلى تاريخ</label><input type='date' id='behPositiveTo' onchange='renderPositiveReport()'></div></div>"+
+    "<div class='behavior-hero'><div><h3 data-ar='تقرير السلوك الإيجابي' data-en='Positive Behavior Report'>تقرير السلوك الإيجابي</h3><p data-ar='تحليل شامل للسلوك الإيجابي وبطاقات الطلاب.' data-en='Comprehensive analysis of positive behavior and student cards.'>تحليل شامل للسلوك الإيجابي وبطاقات الطلاب.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' data-behavior-permission='behavior_reports' onclick=\"exportBehaviorExcel('positive')\">📗 Excel</button><button class='beh-btn beh-btn-gold' data-behavior-permission='behavior_reports' onclick=\"printBehaviorReport('positive')\">🖨️ <span data-ar='طباعة' data-en='Print'>طباعة</span></button></div></div>"+
+    "<div class='beh-filters'><div class='beh-filter'><label data-ar='السنة الدراسية' data-en='Scholastic Year'>السنة الدراسية</label><select id='behPositiveYear' onchange=\"changeBehaviorReportPeriod('positive')\"></select></div><div class='beh-filter'><label data-ar='الفصل الدراسي' data-en='Semester'>الفصل الدراسي</label><select id='behPositiveSemester' onchange=\"changeBehaviorReportPeriod('positive')\"></select></div><div class='beh-filter'><label data-ar='بحث' data-en='Search'>بحث</label><input id='behPositiveSearch' oninput='renderPositiveReport()'></div><div class='beh-filter'><label data-ar='الفصل' data-en='Class'>الفصل</label><select id='behPositiveFilterClass' onchange='renderPositiveReport()'></select></div><div class='beh-filter'><label data-ar='نوع السلوك' data-en='Behavior Type'>نوع السلوك</label><select id='behPositiveFilterType' onchange='renderPositiveReport()'></select></div><div class='beh-filter'><label data-ar='من تاريخ' data-en='From Date'>من تاريخ</label><input type='date' id='behPositiveFrom' onchange='renderPositiveReport()'></div><div class='beh-filter'><label data-ar='إلى تاريخ' data-en='To Date'>إلى تاريخ</label><input type='date' id='behPositiveTo' onchange='renderPositiveReport()'></div></div>"+
     "<div id='behPositiveStats' class='beh-kpis'></div><div class='beh-panel'><div class='beh-panel-head'><h3 data-ar='السجلات المطابقة' data-en='Matching Records'>السجلات المطابقة</h3><span id='behPositiveCount' class='beh-count'></span></div><div class='beh-table-wrap' style='border:0;border-radius:0'><table class='beh-table'><thead><tr><th data-ar='الرقم' data-en='No.'>الرقم</th><th data-ar='التاريخ' data-en='Date'>التاريخ</th><th data-ar='الطالب' data-en='Student'>الطالب</th><th data-ar='الفصل' data-en='Class'>الفصل</th><th data-ar='نوع السلوك' data-en='Behavior Type'>نوع السلوك</th><th data-ar='النقاط' data-en='Points'>النقاط</th><th data-ar='التعزيز' data-en='Reward'>التعزيز</th><th data-ar='الإجراءات' data-en='Actions'>الإجراءات</th></tr></thead><tbody id='behPositiveBody'></tbody></table></div></div><div class='beh-panel'><div class='beh-panel-head'><h3 data-ar='بطاقات الطلاب' data-en='Student Cards'>بطاقات الطلاب</h3></div><div class='beh-panel-body'><div id='behStudentCards' class='beh-student-cards'></div></div></div>"+
   "</div>";
 
@@ -352,6 +382,19 @@ window.selectPlatformApp=function(appName,remember){
   }
 };
 
+window.switchPlatformApp=function(){
+  if(!user)return;
+  var current=window.currentPlatformApp||"attendance";
+  var target=current==="attendance"?"behavior":"attendance";
+  if(target==="behavior"&&!appHasBehavior()){
+    toast(tr("لا تملك صلاحية لتطبيق السلوك","You do not have access to the Behavior app"));return;
+  }
+  if(target==="attendance"&&!appHasAttendance()){
+    toast(tr("لا تملك صلاحية لتطبيق الحضور","You do not have access to the Attendance app"));return;
+  }
+  window.selectPlatformApp(target,true);
+};
+
 function firstPageAllowed(){
   var order=["behavior-dashboard","behavior-log","behavior-positive","behavior-records","behavior-positive-report","behavior-procedures","behavior-reference","behavior-settings"];
   return order.find(function(page){return behaviorPageAllowed(page);})||"behavior-dashboard";
@@ -364,7 +407,7 @@ function updateActiveAppChip(){
 function behaviorPermission(page){
   return {
     "behavior-dashboard":"behavior_dashboard","behavior-log":"behavior_record","behavior-positive":"behavior_record",
-    "behavior-records":"behavior_manage","behavior-positive-report":"behavior_reports",
+    "behavior-records":"behavior_reports","behavior-positive-report":"behavior_reports",
     "behavior-procedures":"behavior_reference","behavior-reference":"behavior_reference","behavior-settings":"behavior_manage"
   }[page];
 }
@@ -449,6 +492,21 @@ function classOptions(all){
   });
   return items;
 }
+function fillBehaviorReportPeriod(kind){
+  var prefix=kind==="positive"?"behPositive":"behRecord",yearEl=document.getElementById(prefix+"Year"),semesterEl=document.getElementById(prefix+"Semester");if(!yearEl||!semesterEl)return;
+  syncActiveAcademicData();
+  var years=Object.keys(db.academicYears).sort().reverse(),savedYear=yearEl.value,savedSemester=semesterEl.value;
+  var selectedYear=years.includes(savedYear)?savedYear:(years.includes(db.activeAcademicYear)?db.activeAcademicYear:years[0]);
+  yearEl.innerHTML=years.map(function(year){return option(year,year,selectedYear);}).join("");
+  var selectedSemester=["1","2","both"].includes(savedSemester)?savedSemester:String(db.activeSemester||"1");
+  semesterEl.innerHTML=option("both",tr("الفصلان الأول والثاني","Both Semesters"),selectedSemester)+option("1",tr("الفصل الأول","Semester 1"),selectedSemester)+option("2",tr("الفصل الثاني","Semester 2"),selectedSemester);
+  var classId=kind==="positive"?"behPositiveFilterClass":"behRecordClass",classEl=document.getElementById(classId),previous=classEl&&classEl.value;
+  if(classEl){var classes=behaviorReportClasses(kind).sort(function(a,b){return className(a).localeCompare(className(b),L()==="ar"?"ar":"en");});classEl.innerHTML=option("",tx("all"))+classes.map(function(c){return option(c.id,className(c)+" · "+programLabel(c.program)+" · "+tr("صف ","Grade ")+classGrade(c),previous);}).join("");if(!classes.some(function(c){return c.id===previous;}))classEl.value="";}
+}
+window.changeBehaviorReportPeriod=function(kind){
+  fillBehaviorReportPeriod(kind);
+  if(kind==="positive")renderPositiveReport();else renderBehaviorRecords();
+};
 function responsibleOptions(){
   return [{value:"",label:tx("select")}].concat(settings().responsibles.map(function(r){return{value:r.id,label:L()==="ar"?r.ar:r.en};}));
 }
@@ -489,6 +547,7 @@ function fillBehaviorSelectors(){
   fillOptions("behPositiveParent",yesOptions(true),saved.behPositiveParent||"no");
   fillOptions("behPositiveContact",contactOptions(),saved.behPositiveContact);
   fillOptions("behPositiveResponsible",responsibleOptions(),saved.behPositiveResponsible);
+  fillBehaviorReportPeriod("violations");fillBehaviorReportPeriod("positive");
   fillBehaviorStudents("violation",saved.behViolationStudent);fillBehaviorStudents("positive",saved.behPositiveStudent);
 }
 
@@ -574,21 +633,22 @@ window.deleteViolationRecord=function(id){
 };
 
 function filteredViolationRecords(){
-  var list=visibleViolations(),search=(document.getElementById("behRecordSearch")&&document.getElementById("behRecordSearch").value||"").trim().toLowerCase();
+  var list=behaviorReportRecords("violations"),search=(document.getElementById("behRecordSearch")&&document.getElementById("behRecordSearch").value||"").trim().toLowerCase();
   var classId=document.getElementById("behRecordClass")&&document.getElementById("behRecordClass").value||"";
   var level=document.getElementById("behRecordLevel")&&document.getElementById("behRecordLevel").value||"";
   var status=document.getElementById("behRecordStatus")&&document.getElementById("behRecordStatus").value||"";
   var from=document.getElementById("behRecordFrom")&&document.getElementById("behRecordFrom").value||"",to=document.getElementById("behRecordTo")&&document.getElementById("behRecordTo").value||"";
   return list.filter(function(r){
-    var hay=[r.id,studentDisplay(r.studentId,r.studentName),classDisplay(r.classId,r.className),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),r.desc,r.notes].join(" ").toLowerCase();
+    var hay=[r.id,behaviorReportStudentName(r),behaviorReportClassName(r),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),r.desc,r.notes].join(" ").toLowerCase();
     return(!search||hay.indexOf(search)>=0)&&(!classId||r.classId===classId)&&(!level||r.vlevel===level)&&(!status||r.status===status)&&(!from||r.date>=from)&&(!to||r.date<=to);
   }).sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""))||String(b.id).localeCompare(String(a.id));});
 }
 window.renderBehaviorRecords=function(){
   var body=document.getElementById("behRecordsBody");if(!body)return;var rows=filteredViolationRecords();
-  var count=document.getElementById("behRecordCount");if(count)count.textContent=tr("عرض ","Showing ")+rows.length+tr(" من "," of ")+visibleViolations().length+tr(" سجل"," records");
+  var allRecords=behaviorReportRecords("violations"),editable=behaviorReportEditable("violations"),count=document.getElementById("behRecordCount");if(count)count.textContent=tr("عرض ","Showing ")+rows.length+tr(" من "," of ")+allRecords.length+tr(" سجل"," records");
   body.innerHTML=rows.length?rows.map(function(r){
-    return "<tr><td><strong>"+esc(r.id)+"</strong></td><td>"+esc(displayDate(r.date))+"</td><td>"+esc(studentDisplay(r.studentId,r.studentName))+"</td><td>"+esc(classDisplay(r.classId,r.className))+"</td><td><span class='beh-badge beh-level-"+esc(r.vlevel)+"'>"+esc(r.vlevel+" · "+levelLabel(r.vlevel))+"</span></td><td title='"+esc(violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype))+"'>"+esc(violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype))+"</td><td>"+esc(yesNo(r.parentNotified))+"</td><td><span class='beh-badge beh-status-"+esc(r.status||"open")+"'>"+esc(statusLabel(r.status))+"</span></td><td><div class='beh-table-actions'><button class='beh-btn beh-btn-outline beh-btn-sm' onclick=\"editViolationRecord('"+esc(r.id)+"')\">✏️</button><button class='beh-btn beh-btn-danger beh-btn-sm' onclick=\"deleteViolationRecord('"+esc(r.id)+"')\">🗑️</button></div></td></tr>";
+    var actions=editable&&hasPermission("behavior_manage")?"<div class='beh-table-actions'><button class='beh-btn beh-btn-outline beh-btn-sm' onclick=\"editViolationRecord('"+esc(r.id)+"')\">✏️</button><button class='beh-btn beh-btn-danger beh-btn-sm' onclick=\"deleteViolationRecord('"+esc(r.id)+"')\">🗑️</button></div>":"—";
+    return "<tr><td><strong>"+esc(r.id)+"</strong></td><td>"+esc(displayDate(r.date))+"</td><td>"+esc(behaviorReportStudentName(r))+"</td><td>"+esc(behaviorReportClassName(r))+"</td><td><span class='beh-badge beh-level-"+esc(r.vlevel)+"'>"+esc(r.vlevel+" · "+levelLabel(r.vlevel))+"</span></td><td title='"+esc(violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype))+"'>"+esc(violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype))+"</td><td>"+esc(yesNo(r.parentNotified))+"</td><td><span class='beh-badge beh-status-"+esc(r.status||"open")+"'>"+esc(statusLabel(r.status))+"</span></td><td>"+actions+"</td></tr>";
   }).join(""):rowEmpty(9);
 };
 
@@ -631,11 +691,11 @@ window.deletePositiveRecord=function(id){
 };
 
 function filteredPositiveRecords(){
-  var list=visiblePositives(),search=(document.getElementById("behPositiveSearch")&&document.getElementById("behPositiveSearch").value||"").trim().toLowerCase();
+  var list=behaviorReportRecords("positive"),search=(document.getElementById("behPositiveSearch")&&document.getElementById("behPositiveSearch").value||"").trim().toLowerCase();
   var classId=document.getElementById("behPositiveFilterClass")&&document.getElementById("behPositiveFilterClass").value||"",type=document.getElementById("behPositiveFilterType")&&document.getElementById("behPositiveFilterType").value||"";
   var from=document.getElementById("behPositiveFrom")&&document.getElementById("behPositiveFrom").value||"",to=document.getElementById("behPositiveTo")&&document.getElementById("behPositiveTo").value||"";
   return list.filter(function(r){
-    var hay=[r.id,studentDisplay(r.studentId,r.studentName),classDisplay(r.classId,r.className),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.desc].join(" ").toLowerCase();
+    var hay=[r.id,behaviorReportStudentName(r),behaviorReportClassName(r),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.desc].join(" ").toLowerCase();
     return(!search||hay.indexOf(search)>=0)&&(!classId||r.classId===classId)&&(!type||(r.behaviorTypeKey||r.behaviorType)===type)&&(!from||r.date>=from)&&(!to||r.date<=to);
   }).sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""))||String(b.id).localeCompare(String(a.id));});
 }
@@ -644,16 +704,16 @@ window.renderPositiveReport=function(){
   document.getElementById("behPositiveStats").innerHTML=[
     ["⭐",rows.length,tr("سلوك إيجابي","Positive Records"),"green"],["🏆",points,tr("نقاط التعزيز","Reinforcement Points"),"gold"],["👤",students,tr("طلاب مميزون","Distinguished Students"),""],["📱",parent,tr("أُشعر ولي الأمر","Parent Notified"),"green"]
   ].map(function(k){return "<div class='beh-kpi "+k[3]+"'><span class='beh-kpi-icon'>"+k[0]+"</span><div><strong>"+k[1]+"</strong><small>"+esc(k[2])+"</small></div></div>";}).join("");
-  document.getElementById("behPositiveCount").textContent=tr("عرض ","Showing ")+rows.length+tr(" من "," of ")+visiblePositives().length;
+  document.getElementById("behPositiveCount").textContent=tr("عرض ","Showing ")+rows.length+tr(" من "," of ")+behaviorReportRecords("positive").length;
   body.innerHTML=rows.length?rows.map(function(r){
-    var actions=hasPermission("behavior_manage")?"<div class='beh-table-actions'><button class='beh-btn beh-btn-outline beh-btn-sm' onclick=\"editPositiveRecord('"+esc(r.id)+"')\">✏️</button><button class='beh-btn beh-btn-danger beh-btn-sm' onclick=\"deletePositiveRecord('"+esc(r.id)+"')\">🗑️</button></div>":"—";
-    return "<tr><td><strong>"+esc(r.id)+"</strong></td><td>"+esc(displayDate(r.date))+"</td><td>"+esc(studentDisplay(r.studentId,r.studentName))+"</td><td>"+esc(classDisplay(r.classId,r.className))+"</td><td>"+esc(tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType))+"</td><td><span class='beh-badge beh-positive'>+"+esc(r.points)+"</span></td><td>"+esc(tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType))+"</td><td>"+actions+"</td></tr>";
+    var actions=behaviorReportEditable("positive")&&hasPermission("behavior_manage")?"<div class='beh-table-actions'><button class='beh-btn beh-btn-outline beh-btn-sm' onclick=\"editPositiveRecord('"+esc(r.id)+"')\">✏️</button><button class='beh-btn beh-btn-danger beh-btn-sm' onclick=\"deletePositiveRecord('"+esc(r.id)+"')\">🗑️</button></div>":"—";
+    return "<tr><td><strong>"+esc(r.id)+"</strong></td><td>"+esc(displayDate(r.date))+"</td><td>"+esc(behaviorReportStudentName(r))+"</td><td>"+esc(behaviorReportClassName(r))+"</td><td>"+esc(tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType))+"</td><td><span class='beh-badge beh-positive'>+"+esc(r.points)+"</span></td><td>"+esc(tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType))+"</td><td>"+actions+"</td></tr>";
   }).join(""):rowEmpty(8);
   renderBehaviorStudentCards(rows);
 };
 function renderBehaviorStudentCards(rows){
   var target=document.getElementById("behStudentCards");if(!target)return;var map={};
-  rows.forEach(function(r){var key=r.studentId||r.studentName;if(!map[key])map[key]={studentId:r.studentId,name:studentDisplay(r.studentId,r.studentName),points:0,count:0,last:""};map[key].points+=Number(r.points)||0;map[key].count++;if(!map[key].last||r.date>map[key].last)map[key].last=r.date;});
+  rows.forEach(function(r){var key=r.studentId||r.studentName;if(!map[key])map[key]={studentId:r.studentId,name:behaviorReportStudentName(r),points:0,count:0,last:""};map[key].points+=Number(r.points)||0;map[key].count++;if(!map[key].last||r.date>map[key].last)map[key].last=r.date;});
   var cards=Object.values(map).sort(function(a,b){return b.points-a.points;});
   target.innerHTML=cards.length?cards.map(function(s){return "<div class='beh-student-card'><strong>"+esc(s.name)+"</strong><div class='score'>"+s.points+" "+tr("نقطة","points")+"</div><small>"+s.count+" "+tr("سجل · آخر تعزيز ","records · last reinforcement ")+displayDate(s.last)+"</small></div>";}).join(""):"<div class='beh-empty'>"+esc(tx("noData"))+"</div>";
 }
@@ -717,38 +777,41 @@ window.deleteBehaviorProcedure=function(id){
 };
 
 function behaviorReportRows(kind){
+  var period=behaviorReportPeriod(kind);
   var context=[
-    [localizedSchoolName()],[tr("النظام","System"),tr("السلوك والمواظبة","Behavior")],[tr("السنة الدراسية","Academic Year"),db.activeAcademicYear],
-    [tr("الفصل الدراسي","Semester"),tr("الفصل ","Semester ")+db.activeSemester],[tr("البرنامج","Program"),programLabel(db.activeProgram)],[tr("تاريخ التصدير","Generated"),new Date().toLocaleString(L()==="ar"?"ar-SA":"en-GB")],[]
+    [localizedSchoolName()],[tr("النظام","System"),tr("السلوك والمواظبة","Behavior")],[tr("السنة الدراسية","Academic Year"),period.academicYear],
+    [tr("الفصل الدراسي","Semester"),behaviorSemesterLabel(period)],[tr("البرنامج","Program"),programLabel(db.activeProgram)],[tr("تاريخ التصدير","Generated"),new Date().toLocaleString(L()==="ar"?"ar-SA":"en-GB")],[]
   ];
   if(kind==="positive"){
     var p=filteredPositiveRecords();context.push([tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الرقم المدرسي","School ID"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points"),tr("التعزيز","Reward"),tr("ولي الأمر","Parent"),tr("المسؤول","Responsible"),tr("الوصف","Description"),tr("التوصية","Recommendation")]);
-    return context.concat(p.map(function(r){return[r.id,r.date,studentDisplay(r.studentId,r.studentName),studentFor(r.studentId).schoolId||"",classDisplay(r.classId,r.className),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.points,tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType),yesNo(r.parentNotified),responsibleLabel(r.responsible),r.desc||"",r.recommendation||""];}));
+    return context.concat(p.map(function(r){return[r.id,r.date,behaviorReportStudentName(r),behaviorReportStudent(r).schoolId||"",behaviorReportClassName(r),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.points,tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType),yesNo(r.parentNotified),responsibleLabel(r.responsible),r.desc||"",r.recommendation||""];}));
   }
   var v=filteredViolationRecords();context.push([tr("رقم الحالة","Case No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الرقم المدرسي","School ID"),tr("الفصل","Class"),tr("الدرجة","Level"),tr("المخالفة","Violation"),tr("الحسم","Deduction"),tr("الإجراءات","Interventions"),tr("التوثيق","Documented"),tr("ولي الأمر","Parent"),tr("الحالة","Status"),tr("المسؤول","Responsible"),tr("الملاحظات","Notes")]);
-  return context.concat(v.map(function(r){return[r.id,r.date,studentDisplay(r.studentId,r.studentName),studentFor(r.studentId).schoolId||"",classDisplay(r.classId,r.className),r.vlevel+" · "+levelLabel(r.vlevel),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),r.deduction,(r.procedureKeys||r.procedures||[]).map(function(x){return procedureLabel(r.vlevel,x);}).concat(r.manualProcedure?[r.manualProcedure]:[]).join(" | "),yesNo(r.documented),yesNo(r.parentNotified),statusLabel(r.status),responsibleLabel(r.responsible),r.notes||""];}));
+  return context.concat(v.map(function(r){return[r.id,r.date,behaviorReportStudentName(r),behaviorReportStudent(r).schoolId||"",behaviorReportClassName(r),r.vlevel+" · "+levelLabel(r.vlevel),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),r.deduction,(r.procedureKeys||r.procedures||[]).map(function(x){return procedureLabel(r.vlevel,x);}).concat(r.manualProcedure?[r.manualProcedure]:[]).join(" | "),yesNo(r.documented),yesNo(r.parentNotified),statusLabel(r.status),responsibleLabel(r.responsible),r.notes||""];}));
 }
 window.exportBehaviorExcel=async function(kind){
-  if(!hasPermission("export")){toast(tr("لا تملك صلاحية التصدير","You do not have export permission"));return;}
+  if(!hasPermission("behavior_reports")){toast(tr("لا تملك صلاحية تقارير السلوك","You do not have Behavior Reports permission"));return;}
   try{
     var XLSXLib=await ensureXlsxLibrary(),rows=behaviorReportRows(kind),sheet=XLSXLib.utils.aoa_to_sheet(rows),book=XLSXLib.utils.book_new();
     sheet["!cols"]=Array.from({length:Math.max.apply(null,rows.map(function(r){return r.length;}))},function(_,i){return{wch:Math.min(45,Math.max(12,rows.reduce(function(m,r){return Math.max(m,String(r[i]||"").length);},0)+2))};});
     XLSXLib.utils.book_append_sheet(book,sheet,kind==="positive"?tr("السلوك الإيجابي","Positive Behavior"):tr("المخالفات","Violations"));
-    XLSXLib.writeFile(book,(kind==="positive"?"positive-behavior":"behavior-violations")+"-"+db.activeAcademicYear+"-S"+db.activeSemester+".xlsx");
+    var period=behaviorReportPeriod(kind);XLSXLib.writeFile(book,(kind==="positive"?"positive-behavior":"behavior-violations")+"-"+period.academicYear+"-"+period.semester+".xlsx");
   }catch(error){toast(error&&error.message||tr("تعذر إنشاء ملف Excel","Could not create the Excel file"));}
 };
 
 function printTable(kind){
   var positive=kind==="positive",records=positive?filteredPositiveRecords():filteredViolationRecords();
   var heads=positive?[tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points"),tr("التعزيز","Reward")]:[tr("رقم الحالة","Case No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("الدرجة","Level"),tr("المخالفة","Violation"),tr("ولي الأمر","Parent"),tr("الحالة","Status")];
-  var body=records.map(function(r){var cells=positive?[r.id,displayDate(r.date),studentDisplay(r.studentId,r.studentName),classDisplay(r.classId,r.className),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.points,tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType)]:[r.id,displayDate(r.date),studentDisplay(r.studentId,r.studentName),classDisplay(r.classId,r.className),r.vlevel+" · "+levelLabel(r.vlevel),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),yesNo(r.parentNotified),statusLabel(r.status)];return"<tr>"+cells.map(function(x){return"<td>"+esc(x)+"</td>";}).join("")+"</tr>";}).join("");
+  var body=records.map(function(r){var cells=positive?[r.id,displayDate(r.date),behaviorReportStudentName(r),behaviorReportClassName(r),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.points,tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType)]:[r.id,displayDate(r.date),behaviorReportStudentName(r),behaviorReportClassName(r),r.vlevel+" · "+levelLabel(r.vlevel),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),yesNo(r.parentNotified),statusLabel(r.status)];return"<tr>"+cells.map(function(x){return"<td>"+esc(x)+"</td>";}).join("")+"</tr>";}).join("");
   return "<table><thead><tr>"+heads.map(function(h){return"<th>"+esc(h)+"</th>";}).join("")+"</tr></thead><tbody>"+(body||"<tr><td colspan='"+heads.length+"'>"+esc(tx("noData"))+"</td></tr>")+"</tbody></table>";
 }
 window.printBehaviorReport=function(kind){
-  var popup=window.open("","_blank","noopener,noreferrer");if(!popup){toast(tr("اسمح بالنوافذ المنبثقة للطباعة","Allow pop-ups to print"));return;}
-  var title=kind==="positive"?tx("positiveReport"):tx("records"),header=new URL(L()==="ar"?"/print-header-ar.png":"/print-header-en.png",location.href).href;
-  var html="<!doctype html><html lang='"+L()+"' dir='"+(L()==="ar"?"rtl":"ltr")+"'><head><meta charset='utf-8'><title>"+esc(title)+"</title><style>@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{font-family:Arial,Tahoma,sans-serif;color:#17263a;margin:0;font-size:8pt}.header{width:100%;height:auto;max-height:34mm;object-fit:contain;margin-bottom:3mm}.meta{display:flex;justify-content:space-between;gap:8px;border:1px solid #b9c8d7;background:#f6f9fc;padding:6px 8px;margin-bottom:3mm;font-size:7.5pt}.title{text-align:center;font-size:14pt;color:#173b61;margin:2mm 0 3mm}table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#173b61;color:white}th,td{border:1px solid #aebdca;padding:4px;vertical-align:top;overflow-wrap:anywhere}tr{break-inside:avoid;page-break-inside:avoid}thead{display:table-header-group}.footer{margin-top:3mm;text-align:center;color:#667788;font-size:7pt}@media print{button{display:none}}</style></head><body><img class='header' src='"+header+"' onload='window.__headerLoaded=true'><h1 class='title'>"+esc(title)+"</h1><div class='meta'><span>"+esc(tr("السنة الدراسية","Academic Year")+": "+db.activeAcademicYear)+"</span><span>"+esc(tr("الفصل الدراسي","Semester")+": "+db.activeSemester)+"</span><span>"+esc(tr("البرنامج","Program")+": "+programLabel(db.activeProgram))+"</span><span>"+esc(tr("التاريخ","Date")+": "+new Date().toLocaleDateString(L()==="ar"?"ar-SA":"en-GB"))+"</span></div>"+printTable(kind)+"<div class='footer'>"+esc(localizedSchoolName())+"</div><script>setTimeout(function(){window.print();},700);<\/script></body></html>";
-  popup.document.open();popup.document.write(html);popup.document.close();
+  if(!hasPermission("behavior_reports")){toast(tr("لا تملك صلاحية تقارير السلوك","You do not have Behavior Reports permission"));return;}
+  var popup=window.open("","_blank","width=1100,height=800");if(!popup){toast(tr("اسمح بالنوافذ المنبثقة للطباعة","Allow pop-ups to print"));return;}popup.opener=null;
+  var title=kind==="positive"?tx("positiveReport"):tx("records"),header=new URL(L()==="ar"?"/print-header-ar.png":"/print-header-en.png",location.href).href,period=behaviorReportPeriod(kind);
+  var html="<!doctype html><html lang='"+L()+"' dir='"+(L()==="ar"?"rtl":"ltr")+"'><head><meta charset='utf-8'><title>"+esc(title)+"</title><style>@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{font-family:Arial,Tahoma,sans-serif;color:#17263a;margin:0;font-size:8pt}.header{width:100%;height:auto;max-height:34mm;object-fit:contain;margin-bottom:3mm}.meta{display:flex;justify-content:space-between;gap:8px;border:1px solid #b9c8d7;background:#f6f9fc;padding:6px 8px;margin-bottom:3mm;font-size:7.5pt}.title{text-align:center;font-size:14pt;color:#173b61;margin:2mm 0 3mm}table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#173b61;color:white}th,td{border:1px solid #aebdca;padding:4px;vertical-align:top;overflow-wrap:anywhere}tr{break-inside:avoid;page-break-inside:avoid}thead{display:table-header-group}.footer{margin-top:3mm;text-align:center;color:#667788;font-size:7pt}@media print{button{display:none}}</style></head><body><img class='header' src='"+header+"'><h1 class='title'>"+esc(title)+"</h1><div class='meta'><span>"+esc(tr("السنة الدراسية","Academic Year")+": "+period.academicYear)+"</span><span>"+esc(tr("الفصل الدراسي","Semester")+": "+behaviorSemesterLabel(period))+"</span><span>"+esc(tr("البرنامج","Program")+": "+programLabel(db.activeProgram))+"</span><span>"+esc(tr("التاريخ","Date")+": "+new Date().toLocaleDateString(L()==="ar"?"ar-SA":"en-GB"))+"</span></div>"+printTable(kind)+"<div class='footer'>"+esc(localizedSchoolName())+"</div></body></html>";
+  popup.document.open();popup.document.write(html);popup.document.close();popup.onafterprint=function(){popup.close();};
+  var startPrint=function(){setTimeout(function(){popup.focus();popup.print();},100);},image=popup.document.querySelector(".header");if(image&&image.decode)image.decode().catch(function(){}).finally(startPrint);else setTimeout(startPrint,250);
 };
 
 document.addEventListener("DOMContentLoaded",function(){

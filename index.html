@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>منصة الحضور والسلوك | Attendance &amp; Behavior Platform</title>
+<title>منصة نجد المدرسية | Najd Schools Platform</title>
+<meta name="application-name" content="Najd Schools Platform">
+<meta name="description" content="Najd National Schools attendance and behavior platform">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════
@@ -290,6 +292,8 @@ html[dir="rtl"] .mini-stat{border-left:none;border-right:1px solid var(--slate-1
 .tabs{display:flex;border-bottom:1.5px solid var(--slate-200);margin-bottom:18px;
   overflow-x:auto;gap:0}
 .report-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.report-period-bar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--brand-light);border:1px solid var(--brand-mid);border-radius:var(--radius)}
+.report-period-field{display:flex;flex-direction:column;gap:4px;min-width:190px}.report-period-field label{font-size:.72rem;font-weight:700;color:var(--slate-600)}.report-period-field select{width:100%;padding:8px 12px;border-radius:var(--radius);border:1.5px solid var(--slate-200);background:#fff;color:var(--slate-800);font:inherit;outline:none}.report-period-field select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(27,63,106,.09)}
 .tab{padding:9px 18px;border:none;background:none;cursor:pointer;font-family:inherit;
   font-size:.83rem;font-weight:600;color:var(--slate-400);
   border-bottom:2.5px solid transparent;margin-bottom:-1.5px;
@@ -508,7 +512,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
     <div class="lbox-top">
       <img id="loginLogoImg" src="" style="display:none" class="school-logo-preview" alt="logo">
       <div id="loginLogoPlaceholder" style="width:60px;height:60px;background:var(--brand-light);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 10px">🏫</div>
-      <h1 id="loginTitle">نظام الحضور والغياب</h1>
+      <h1 id="loginTitle">منصة نجد المدرسية</h1>
 <p id="loginSubtitle">مدارس نجد الأهلية</p>
     </div>
     <div class="lf"><label id="lbl-email">البريد الإلكتروني</label>
@@ -594,7 +598,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div id="behaviorNav" style="display:none"></div>
     </div>
     <div class="sb-bottom">
-      <button class="lang-btn app-switch-btn" onclick="showAppChooser()">⇄ <span data-ar="تبديل النظام" data-en="Switch System">تبديل النظام</span></button>
+      <button class="lang-btn app-switch-btn" onclick="switchPlatformApp()">⇄ <span data-ar="تبديل النظام" data-en="Switch System">تبديل النظام</span></button>
       <button class="lang-btn" onclick="toggleLang()">🌐 <span id="langBtnTxt">English</span></button>
       <button class="lang-btn" onclick="openM('mPassword')">🔑 <span data-ar="تغيير كلمة المرور" data-en="Change Password">تغيير كلمة المرور</span></button>
       <button class="lo-btn" onclick="doLogout()">🚪 <span data-ar="تسجيل الخروج" data-en="Logout">تسجيل الخروج</span></button>
@@ -609,7 +613,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         <h2 id="pageTitle">لوحة التحكم</h2>
       </div>
       <div class="tb-right">
-        <button id="activeAppButton" class="active-app-chip" onclick="showAppChooser()">📋 <span data-ar="الحضور" data-en="Attendance">الحضور</span> ⇄</button>
+        <button id="activeAppButton" class="active-app-chip" onclick="switchPlatformApp()">📋 <span data-ar="الحضور" data-en="Attendance">الحضور</span> ⇄</button>
         <div class="academic-context" aria-label="Academic period">
           <span aria-hidden="true">🎓</span>
           <select id="programSelect" class="context-select" onchange="changeProgram(this.value)" title="البرنامج | Program"></select>
@@ -749,6 +753,10 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
 
     <!-- ══ REPORTS ══ -->
     <div class="page" id="page-reports">
+      <div class="report-period-bar" aria-label="Report academic period">
+        <div class="report-period-field"><label for="reportAcademicYear" data-ar="السنة الدراسية" data-en="Scholastic Year">السنة الدراسية</label><select id="reportAcademicYear" onchange="refreshAttendanceReportFilters()"></select></div>
+        <div class="report-period-field"><label for="reportSemester" data-ar="الفصل الدراسي" data-en="Semester">الفصل الدراسي</label><select id="reportSemester" onchange="refreshAttendanceReportFilters()"></select></div>
+      </div>
       <div class="tabs">
         <button class="tab active" onclick="swTab('rCls',this)" data-ar="حسب الفصل" data-en="By Class">📊 حسب الفصل</button>
         <button class="tab" onclick="swTab('rStu',this)" data-ar="حسب الطالب" data-en="By Student">👤 حسب الطالب</button>
@@ -756,11 +764,11 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         <button class="tab" onclick="swTab('rPer',this)" data-ar="نطاق زمني" data-en="Date Range">📆 نطاق زمني</button>
         <button class="tab" onclick="swTab('rTop',this)" data-ar="الأكثر غياباً" data-en="Top Absent">⚠️ الأكثر غياباً</button>
       </div>
-      <div class="tp active" id="rCls"><div class="card"><div class="ch"><h3 data-ar="تقرير الفصل" data-en="Class Report">تقرير الفصل</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="export" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="export" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rClsS"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><select id="rMonS"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><input type="number" id="rYrS" style="width:88px" placeholder="Year / السنة"><button class="btn btn-p btn-sm" onclick="renderClsRpt()">🔍</button></div><div id="clsRptOut"></div></div></div></div>
-      <div class="tp" id="rStu"><div class="card"><div class="ch"><h3 data-ar="تقرير الطالب" data-en="Student Report">تقرير الطالب</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="export" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="export" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rStuCls" onchange="fillRptStuList()"><option value="" data-ar="اختر الفصل" data-en="Select Class">اختر الفصل</option></select><select id="rStuS"><option value="" data-ar="اختر الطالب" data-en="Select Student">اختر الطالب</option></select><select id="rStuMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><input type="number" id="rStuYr" style="width:88px" placeholder="Year"><button class="btn btn-p btn-sm" onclick="renderStuRpt()">🔍</button></div><div id="stuRptOut"></div></div></div></div>
-      <div class="tp" id="rDay"><div class="card"><div class="ch"><h3 data-ar="التقرير اليومي" data-en="Daily Report">التقرير اليومي</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="export" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="export" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><input type="date" id="rDayD"><button class="btn btn-p btn-sm" onclick="renderDayRpt()">🔍</button></div><div id="dayRptOut"></div></div></div></div>
-      <div class="tp" id="rPer"><div class="card"><div class="ch"><h3 data-ar="نطاق زمني" data-en="Custom Date Range">نطاق زمني</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="export" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="export" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="من:" data-en="From:">من:</label><input type="date" id="rFrom"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="إلى:" data-en="To:">إلى:</label><input type="date" id="rTo"><select id="rPerCls"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><button class="btn btn-p btn-sm" onclick="renderPerRpt()">🔍</button></div><div id="perRptOut"></div></div></div></div>
-      <div class="tp" id="rTop"><div class="card"><div class="ch"><h3 data-ar="الأكثر غياباً" data-en="Most Absent">الأكثر غياباً</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="export" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="export" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rTopMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><input type="number" id="rTopYr" style="width:88px" placeholder="Year"><button class="btn btn-p btn-sm" onclick="renderTopRpt()">🔍</button></div><div id="topRptOut"></div></div></div></div>
+      <div class="tp active" id="rCls"><div class="card"><div class="ch"><h3 data-ar="تقرير الفصل" data-en="Class Report">تقرير الفصل</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rClsS"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><select id="rMonS"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="renderClsRpt()">🔍</button></div><div id="clsRptOut"></div></div></div></div>
+      <div class="tp" id="rStu"><div class="card"><div class="ch"><h3 data-ar="تقرير الطالب" data-en="Student Report">تقرير الطالب</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rStuCls" onchange="fillRptStuList()"><option value="" data-ar="اختر الفصل" data-en="Select Class">اختر الفصل</option></select><select id="rStuS"><option value="" data-ar="اختر الطالب" data-en="Select Student">اختر الطالب</option></select><select id="rStuMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="renderStuRpt()">🔍</button></div><div id="stuRptOut"></div></div></div></div>
+      <div class="tp" id="rDay"><div class="card"><div class="ch"><h3 data-ar="التقرير اليومي" data-en="Daily Report">التقرير اليومي</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><input type="date" id="rDayD"><button class="btn btn-p btn-sm" onclick="renderDayRpt()">🔍</button></div><div id="dayRptOut"></div></div></div></div>
+      <div class="tp" id="rPer"><div class="card"><div class="ch"><h3 data-ar="نطاق زمني" data-en="Custom Date Range">نطاق زمني</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="من:" data-en="From:">من:</label><input type="date" id="rFrom"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="إلى:" data-en="To:">إلى:</label><input type="date" id="rTo"><select id="rPerCls"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><button class="btn btn-p btn-sm" onclick="renderPerRpt()">🔍</button></div><div id="perRptOut"></div></div></div></div>
+      <div class="tp" id="rTop"><div class="card"><div class="ch"><h3 data-ar="الأكثر غياباً" data-en="Most Absent">الأكثر غياباً</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rTopMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="renderTopRpt()">🔍</button></div><div id="topRptOut"></div></div></div></div>
     </div>
 
     <!-- ══ NOTIFICATIONS ══ -->
@@ -1148,7 +1156,7 @@ function applyLang(){
   });
   // Update specific IDs
   const lmap = {
-    loginTitle: {ar:'منصة الحضور والسلوك', en:'Attendance & Behavior Platform'},
+    loginTitle: {ar:'منصة نجد المدرسية', en:'Najd Schools Platform'},
     'lbl-email': {ar:'البريد الإلكتروني', en:'Email Address'},
     'lbl-pass': {ar:'كلمة المرور', en:'Password'},
     'lbtn-login': {ar:'🔐 تسجيل الدخول', en:'🔐 Login'},
@@ -1181,6 +1189,7 @@ function toggleLang(){
     if(id==='students') renderStuTable();
     if(id==='classes') renderClsTable();
     if(id==='teachers') renderTchTable();
+    if(id==='reports') window.refreshAttendanceReportFilters?.();
     if(id==='notifications') renderNotifTable();
     if(id==='permissions') renderPerms();
     if(id==='settings') renderAcademicControls();
@@ -1687,6 +1696,7 @@ function refreshAcademicViews(){
   const attRows=document.getElementById('attRows');
   if(attRows)attRows.innerHTML='';
   if(document.getElementById('page-notifications').classList.contains('active'))renderNotifTable();
+  window.refreshAttendanceReportFilters?.({render:false});
   window.refreshBehaviorContext?.();
 }
 
@@ -1747,14 +1757,13 @@ function fillSelects(){
   ['stuClsF','rClsS','rPerCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsOpt(); });
   ['eClsTch'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=tchOpt(); });
   ['rMonS','rStuMon','rTopMon'].forEach(id=>{ const el=document.getElementById(id);if(el){const m=LANG==='ar'?MONTHS_AR:MONTHS_EN;el.innerHTML=`<option value="">${LANG==='ar'?'كل الأشهر':'All Months'}</option>`+m.map((mn,i)=>`<option value="${i+1}">${mn}</option>`).join('');} });
-  const yr=new Date().getFullYear();
-  ['rYrS','rStuYr','rTopYr'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=yr;});
   document.getElementById('rDayD').value=today();
   document.getElementById('rFrom').value=today().slice(0,8)+'01';
   document.getElementById('rTo').value=today();
   // Notif class filter
   const nf=document.getElementById('nfClsF');
   if(nf)nf.innerHTML=`<option value="">${LANG==='ar'?'كل الفصول':'All Classes'}</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
+  window.refreshAttendanceReportFilters?.({render:false});
 }
 
 // ════════════════════════════════════════════
@@ -1806,7 +1815,7 @@ function goPage(name,el){
   if(name==='students') renderStuTable();
   if(name==='classes') renderClsTable();
   if(name==='teachers') renderTchTable();
-  if(name==='reports'){ fillSelects(); }
+  if(name==='reports'){ fillSelects(); window.refreshAttendanceReportFilters?.(); }
   if(name==='settings'){applySchoolBranding();renderAcademicControls();}
   // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
@@ -2245,10 +2254,11 @@ function swTab(name,btn){
   document.querySelectorAll('.tp').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.getElementById(name).classList.add('active'); btn.classList.add('active');
+  window.refreshActiveAttendanceReport?.();
 }
 
-function rptRow(s,dates,cls,month,year){
-  const st=getStuStats(s.id,null,null,month||null,year||null);
+function rptRow(s,dates,cls,month){
+  const st=getStuStats(s.id,null,null,month||null,null);
   const tot=st.present+st.absent+st.early; const pct=tot>0?Math.round(st.present/tot*100):100;
   const bc=pct>=90?'hi':pct>=70?'mi':'lo';
   const bdg=st.absent===0&&st.early===0?`<span class="badge bg-g">${t('regular')}</span>`:st.absent<=2?`<span class="badge bg-o">${t('warning')}</span>`:`<span class="badge bg-r">${t('critical')}</span>`;
@@ -2256,36 +2266,39 @@ function rptRow(s,dates,cls,month,year){
 }
 
 function renderClsRpt(){
+  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderClsRpt);
   const cls=document.getElementById('rClsS').value;
   const month=document.getElementById('rMonS').value;
-  const year=document.getElementById('rYrS').value;
   const classes=cls?[db.classes[cls]].filter(Boolean):visibleClasses();
   let html='';
   classes.forEach(c=>{
     const ss=visibleStudents().filter(s=>s.classId===c.id);
     if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:14px 0 8px;font-size:.9rem">${className(c)}</div>
-    <table style="margin-bottom:16px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حضور':'Present'}</th><th>${LANG==='ar'?'غياب':'Absent'}</th><th>${LANG==='ar'?'مبكر':'Early'}</th><th>%</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${ss.map(s=>rptRow(s,[],c.id,month,year)).join('')}</tbody></table>`;
+    <table style="margin-bottom:16px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حضور':'Present'}</th><th>${LANG==='ar'?'غياب':'Absent'}</th><th>${LANG==='ar'?'مبكر':'Early'}</th><th>%</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${ss.map(s=>rptRow(s,[],c.id,month)).join('')}</tbody></table>`;
   });
   document.getElementById('clsRptOut').innerHTML=html||`<div style="text-align:center;padding:30px;color:var(--slate-400)">${t('noData')}</div>`;
 }
 
 function fillRptStuList(){
+  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(fillRptStuList);
   const cls=document.getElementById('rStuCls').value;
   const sel=document.getElementById('rStuS');
+  const previous=sel.value;
   sel.innerHTML=`<option value="">${LANG==='ar'?'اختر الطالب':'Select Student'}</option>`;
   if(!cls)return;
   visibleStudents().filter(s=>s.classId===cls).forEach(s=>sel.innerHTML+=`<option value="${s.id}">${s.name}</option>`);
+  if([...sel.options].some(option=>option.value===previous))sel.value=previous;
 }
 
 function renderStuRpt(){
+  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderStuRpt);
   const sid=document.getElementById('rStuS').value;
   const month=document.getElementById('rStuMon').value;
-  const year=document.getElementById('rStuYr').value;
   const out=document.getElementById('stuRptOut');
   if(!sid){out.innerHTML=`<div style="text-align:center;padding:20px;color:var(--slate-400)">${LANG==='ar'?'اختر طالباً':'Select a student'}</div>`;return;}
   const stu=db.students[sid]; const cls=stu?db.classes[stu.classId]:null;
-  const st=getStuStats(sid,null,null,month||null,year||null);
+  const st=getStuStats(sid,null,null,month||null,null);
   const tot=st.present+st.absent+st.early; const pct=tot>0?Math.round(st.present/tot*100):100;
   const aList=st.absentDates.map(d=>`<span class="badge bg-r" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--success)">${t('noAbsent')} 🎉</span>`;
   out.innerHTML=`<div style="background:var(--slate-50);border-radius:var(--radius);padding:16px;margin-bottom:14px;border:1px solid var(--slate-200)">
@@ -2310,6 +2323,7 @@ function renderStuRpt(){
 }
 
 function renderDayRpt(){
+  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderDayRpt);
   const date=document.getElementById('rDayD').value;
   if(!date){document.getElementById('dayRptOut').innerHTML='';return;}
   let rows='';
@@ -2324,6 +2338,7 @@ function renderDayRpt(){
 }
 
 function renderPerRpt(){
+  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderPerRpt);
   const from=document.getElementById('rFrom').value; const to=document.getElementById('rTo').value;
   const cls=document.getElementById('rPerCls').value;
   if(!from||!to){document.getElementById('perRptOut').innerHTML='';return;}
@@ -2340,8 +2355,9 @@ function renderPerRpt(){
 }
 
 function renderTopRpt(){
-  const month=document.getElementById('rTopMon').value; const year=document.getElementById('rTopYr').value;
-  const top=visibleStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,year||null);const cls=db.classes[s.classId];return{...s,absent:st.absent,early:st.early,clsName:cls?className(cls):s.classId};}).filter(s=>s.absent>0||s.early>0).sort((a,b)=>b.absent-a.absent);
+  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderTopRpt);
+  const month=document.getElementById('rTopMon').value;
+  const top=visibleStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,null);const cls=db.classes[s.classId];return{...s,absent:st.absent,early:st.early,clsName:cls?className(cls):s.classId};}).filter(s=>s.absent>0||s.early>0).sort((a,b)=>b.absent-a.absent);
   document.getElementById('topRptOut').innerHTML=top.length?`<table><thead><tr><th>#</th><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${t('absent')}</th><th>${t('earlyLeave')}</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${s.clsName}</span></td><td><span class="badge bg-r">${s.absent}</span></td><td><span class="badge bg-o">${s.early}</span></td><td><span class="badge ${s.absent>=5?'bg-r':s.absent>=3?'bg-o':'bg-gr'}">${s.absent>=5?t('critical'):s.absent>=3?t('warning'):'ℹ️'}</span></td></tr>`).join('')}</tbody></table>`:`<div style="text-align:center;padding:30px;color:var(--success)">${t('noAbsent')} 🎉</div>`;
 }
 
@@ -2468,7 +2484,7 @@ function resetNotifFilters(){
 // PERMISSIONS — EDITABLE TOGGLES
 // ════════════════════════════════════════════
 function renderPerms(){
-  const perms=['dashboard','attendance','students_edit','students_delete','classes','teachers','reports','export','notifications','behavior_dashboard','behavior_record','behavior_manage','behavior_reports','behavior_reference','permissions','settings'];
+  const perms=['dashboard','attendance','students_edit','students_delete','classes','teachers','reports','notifications','behavior_dashboard','behavior_record','behavior_manage','behavior_reports','behavior_reference','permissions','settings'];
   const roles=['admin','principal','teacher','supervisor'];
   if(!db.permissions) db.permissions=JSON.parse(JSON.stringify(DEFAULT_PERMS));
   document.getElementById('permTbody').innerHTML=perms.map(perm=>{
