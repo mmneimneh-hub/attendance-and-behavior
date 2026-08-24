@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>نظام الحضور والغياب | Attendance System</title>
+<title>منصة الحضور والسلوك | Attendance &amp; Behavior Platform</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════
@@ -489,6 +489,7 @@ html[dir="ltr"] .att-row.r-full{border-left-color:var(--purple)}
   .card{box-shadow:none!important;border:1px solid #ddd!important}
 }
 </style>
+<link rel="stylesheet" href="/behavior.css">
 <script>
 window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
 </script>
@@ -518,6 +519,39 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
   </div>
 </div>
 
+<!-- ══════════════ APP CHOOSER ══════════════ -->
+<div id="appChooser" aria-labelledby="chooserTitle">
+  <button class="lang-switch-login" onclick="toggleLang()">🌐 EN / عر</button>
+  <div class="chooser-shell">
+    <div class="chooser-brand">
+      <img id="chooserLogo" src="" alt="" style="display:none">
+      <div id="chooserLogoPlaceholder">🏫</div>
+      <div>
+        <h1 id="chooserSchool">مدارس نجد الأهلية</h1>
+        <p id="chooserGreeting">مرحباً</p>
+      </div>
+    </div>
+    <div class="chooser-copy">
+      <span class="chooser-eyebrow" data-ar="منصة موحدة" data-en="Unified platform">منصة موحدة</span>
+      <h2 id="chooserTitle" data-ar="اختر النظام الذي تريد استخدامه" data-en="Choose the system you want to use">اختر النظام الذي تريد استخدامه</h2>
+      <p data-ar="تستخدم الأنظمة نفس المستخدمين والطلاب والفصول والصلاحيات." data-en="Both systems use the same users, students, classes, and permissions.">تستخدم الأنظمة نفس المستخدمين والطلاب والفصول والصلاحيات.</p>
+    </div>
+    <div class="chooser-grid">
+      <button class="app-choice attendance-choice" id="attendanceChoice" onclick="selectPlatformApp('attendance')">
+        <span class="app-choice-icon">📋</span>
+        <span class="app-choice-body"><strong data-ar="الحضور والغياب" data-en="Attendance">الحضور والغياب</strong><small data-ar="تسجيل الحضور اليومي والتقارير والإشعارات" data-en="Daily attendance, reports, and notifications">تسجيل الحضور اليومي والتقارير والإشعارات</small></span>
+        <span class="app-choice-arrow">←</span>
+      </button>
+      <button class="app-choice behavior-choice" id="behaviorChoice" onclick="selectPlatformApp('behavior')">
+        <span class="app-choice-icon">⭐</span>
+        <span class="app-choice-body"><strong data-ar="السلوك والمواظبة" data-en="Behavior">السلوك والمواظبة</strong><small data-ar="المخالفات والتدخلات والسلوك الإيجابي" data-en="Violations, interventions, and positive behavior">المخالفات والتدخلات والسلوك الإيجابي</small></span>
+        <span class="app-choice-arrow">←</span>
+      </button>
+    </div>
+    <button class="chooser-logout" onclick="doLogout()">🚪 <span data-ar="تسجيل الخروج" data-en="Logout">تسجيل الخروج</span></button>
+  </div>
+</div>
+
 <!-- ══════════════ APP ══════════════ -->
 <div id="app">
   <input type="file" id="logoFileInput" accept="image/*" style="display:none" onchange="handleLogoUpload(event)">
@@ -542,6 +576,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       </div>
     </div>
     <div class="sb-nav">
+      <div id="attendanceNav">
       <div class="nav-sec" data-ar="الرئيسية" data-en="Main">الرئيسية</div>
       <div class="ni active" onclick="goPage('dashboard',this)"><span class="ic">🏠</span><span data-ar="لوحة التحكم" data-en="Dashboard">لوحة التحكم</span></div>
       <div class="ni" onclick="goPage('attendance',this)"><span class="ic">📋</span><span data-ar="تسجيل الحضور" data-en="Attendance">تسجيل الحضور</span></div>
@@ -555,8 +590,11 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div class="nav-sec admin-only" data-ar="الإعدادات" data-en="Settings">الإعدادات</div>
       <div class="ni admin-only" onclick="goPage('permissions',this)"><span class="ic">🔐</span><span data-ar="الصلاحيات" data-en="Permissions">الصلاحيات</span></div>
       <div class="ni admin-only" onclick="goPage('settings',this)"><span class="ic">⚙️</span><span data-ar="الإعدادات" data-en="Settings">الإعدادات</span></div>
+      </div>
+      <div id="behaviorNav" style="display:none"></div>
     </div>
     <div class="sb-bottom">
+      <button class="lang-btn app-switch-btn" onclick="showAppChooser()">⇄ <span data-ar="تبديل النظام" data-en="Switch System">تبديل النظام</span></button>
       <button class="lang-btn" onclick="toggleLang()">🌐 <span id="langBtnTxt">English</span></button>
       <button class="lang-btn" onclick="openM('mPassword')">🔑 <span data-ar="تغيير كلمة المرور" data-en="Change Password">تغيير كلمة المرور</span></button>
       <button class="lo-btn" onclick="doLogout()">🚪 <span data-ar="تسجيل الخروج" data-en="Logout">تسجيل الخروج</span></button>
@@ -571,6 +609,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         <h2 id="pageTitle">لوحة التحكم</h2>
       </div>
       <div class="tb-right">
+        <button id="activeAppButton" class="active-app-chip" onclick="showAppChooser()">📋 <span data-ar="الحضور" data-en="Attendance">الحضور</span> ⇄</button>
         <div class="academic-context" aria-label="Academic period">
           <span aria-hidden="true">🎓</span>
           <select id="programSelect" class="context-select" onchange="changeProgram(this.value)" title="البرنامج | Program"></select>
@@ -932,6 +971,11 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
           <label><input type="checkbox" class="tch-section" value="teachers"> <span data-ar="المستخدمون" data-en="Users">المستخدمون</span></label>
           <label><input type="checkbox" class="tch-section" value="reports"> <span data-ar="التقارير" data-en="Reports">التقارير</span></label>
           <label><input type="checkbox" class="tch-section" value="notifications"> <span data-ar="الإشعارات" data-en="Notifications">الإشعارات</span></label>
+          <label><input type="checkbox" class="tch-section" value="behavior_dashboard"> <span data-ar="لوحة السلوك" data-en="Behavior Dashboard">لوحة السلوك</span></label>
+          <label><input type="checkbox" class="tch-section" value="behavior_record"> <span data-ar="تسجيل السلوك" data-en="Record Behavior">تسجيل السلوك</span></label>
+          <label><input type="checkbox" class="tch-section" value="behavior_manage"> <span data-ar="إدارة حالات السلوك" data-en="Manage Behavior Cases">إدارة حالات السلوك</span></label>
+          <label><input type="checkbox" class="tch-section" value="behavior_reports"> <span data-ar="تقارير السلوك" data-en="Behavior Reports">تقارير السلوك</span></label>
+          <label><input type="checkbox" class="tch-section" value="behavior_reference"> <span data-ar="أدلة السلوك" data-en="Behavior References">أدلة السلوك</span></label>
           <label><input type="checkbox" class="tch-section" value="permissions"> <span data-ar="الصلاحيات" data-en="Permissions">الصلاحيات</span></label>
           <label><input type="checkbox" class="tch-section" value="settings"> <span data-ar="الإعدادات" data-en="Settings">الإعدادات</span></label>
         </div>
@@ -1004,6 +1048,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
 <!-- ══════════════════════════════════════════
      JAVASCRIPT
 ══════════════════════════════════════════ -->
+<script src="/behavior.js"></script>
 <script>
 // ════════════════════════════════════════════
 // I18N — BILINGUAL
@@ -1103,7 +1148,7 @@ function applyLang(){
   });
   // Update specific IDs
   const lmap = {
-    loginTitle: {ar:'نظام الحضور والغياب', en:'Attendance Management System'},
+    loginTitle: {ar:'منصة الحضور والسلوك', en:'Attendance & Behavior Platform'},
     'lbl-email': {ar:'البريد الإلكتروني', en:'Email Address'},
     'lbl-pass': {ar:'كلمة المرور', en:'Password'},
     'lbtn-login': {ar:'🔐 تسجيل الدخول', en:'🔐 Login'},
@@ -1119,6 +1164,7 @@ function applyLang(){
   if(roleEl&&typeof user!=='undefined'&&user)roleEl.textContent=t('roles')[user.role]||user.role;
   localStorage.setItem('lang', LANG);
   if(typeof db!=='undefined'&&db&&db.academicYears) renderAcademicControls();
+  window.applyBehaviorLanguage?.();
 }
 
 function toggleLang(){
@@ -1153,15 +1199,15 @@ const SEED_CLASSES = {};
 
 // Default permissions matrix
 const DEFAULT_PERMS = {
-  admin:      {dashboard:1,attendance:1,students_edit:1,students_delete:1,classes:1,teachers:1,reports:1,export:1,notifications:1,permissions:1,settings:1},
-  principal:  {dashboard:1,attendance:1,students_edit:1,students_delete:1,classes:1,teachers:0,reports:1,export:1,notifications:1,permissions:0,settings:0},
-  teacher:    {dashboard:1,attendance:1,students_edit:0,students_delete:0,classes:0,teachers:0,reports:1,export:0,notifications:1,permissions:0,settings:0},
-  supervisor: {dashboard:1,attendance:1,students_edit:0,students_delete:0,classes:0,teachers:0,reports:1,export:1,notifications:0,permissions:0,settings:0}
+  admin:      {dashboard:1,attendance:1,students_edit:1,students_delete:1,classes:1,teachers:1,reports:1,export:1,notifications:1,behavior_dashboard:1,behavior_record:1,behavior_manage:1,behavior_reports:1,behavior_reference:1,permissions:1,settings:1},
+  principal:  {dashboard:1,attendance:1,students_edit:1,students_delete:1,classes:1,teachers:0,reports:1,export:1,notifications:1,behavior_dashboard:1,behavior_record:1,behavior_manage:1,behavior_reports:1,behavior_reference:1,permissions:0,settings:0},
+  teacher:    {dashboard:1,attendance:1,students_edit:0,students_delete:0,classes:0,teachers:0,reports:1,export:0,notifications:1,behavior_dashboard:1,behavior_record:1,behavior_manage:1,behavior_reports:1,behavior_reference:1,permissions:0,settings:0},
+  supervisor: {dashboard:1,attendance:1,students_edit:0,students_delete:0,classes:0,teachers:0,reports:1,export:1,notifications:0,behavior_dashboard:1,behavior_record:1,behavior_manage:1,behavior_reports:1,behavior_reference:1,permissions:0,settings:0}
 };
 
 const PERM_LABELS = {
-  ar:{dashboard:'عرض لوحة التحكم',attendance:'تسجيل الحضور والغياب',students_edit:'إضافة / تعديل الطلاب',students_delete:'حذف الطلاب',classes:'إدارة الفصول',teachers:'إدارة المستخدمين',reports:'عرض التقارير',export:'تصدير التقارير',notifications:'إرسال الإشعارات',permissions:'إدارة الصلاحيات',settings:'الإعدادات'},
-  en:{dashboard:'View Dashboard',attendance:'Record Attendance',students_edit:'Add / Edit Students',students_delete:'Delete Students',classes:'Manage Classes',teachers:'Manage Users',reports:'View Reports',export:'Export Reports',notifications:'Send Notifications',permissions:'Manage Permissions',settings:'Settings'}
+  ar:{dashboard:'عرض لوحة الحضور',attendance:'تسجيل الحضور والغياب',students_edit:'إضافة / تعديل الطلاب',students_delete:'حذف الطلاب',classes:'إدارة الفصول',teachers:'إدارة المستخدمين',reports:'عرض تقارير الحضور',export:'تصدير التقارير',notifications:'إرسال الإشعارات',behavior_dashboard:'عرض لوحة السلوك',behavior_record:'تسجيل السلوك',behavior_manage:'إدارة حالات السلوك',behavior_reports:'عرض تقارير السلوك',behavior_reference:'عرض أدلة وإجراءات السلوك',permissions:'إدارة الصلاحيات',settings:'الإعدادات'},
+  en:{dashboard:'View Attendance Dashboard',attendance:'Record Attendance',students_edit:'Add / Edit Students',students_delete:'Delete Students',classes:'Manage Classes',teachers:'Manage Users',reports:'View Attendance Reports',export:'Export Reports',notifications:'Send Notifications',behavior_dashboard:'View Behavior Dashboard',behavior_record:'Record Behavior',behavior_manage:'Manage Behavior Cases',behavior_reports:'View Behavior Reports',behavior_reference:'View Behavior Guides and Interventions',permissions:'Manage Permissions',settings:'Settings'}
 };
 
 // ════════════════════════════════════════════
@@ -1172,7 +1218,7 @@ const DEFAULT_ACADEMIC_YEAR = '2025-2026';
 const DEFAULT_SCHOOL_NAMES = {ar:'مدارس نجد الأهلية',en:'Najd National Schools'};
 const PROGRAMS = ['national','international'];
 const GRADE_LEVELS = ['4','5','6','7','8','9','10','11','12'];
-const USER_SECTIONS = ['dashboard','attendance','students_edit','classes','teachers','reports','notifications','permissions','settings'];
+const USER_SECTIONS = ['dashboard','attendance','students_edit','classes','teachers','reports','notifications','behavior_dashboard','behavior_record','behavior_manage','behavior_reports','behavior_reference','permissions','settings'];
 let db = {classes:{},students:{},teachers:{},attendance:{},notifications:[],academicYears:{},activeAcademicYear:DEFAULT_ACADEMIC_YEAR,activeSemester:'1',activeProgram:'national',permissions:JSON.parse(JSON.stringify(DEFAULT_PERMS)),settings:{schoolName:DEFAULT_SCHOOL_NAMES.ar,schoolNameAr:DEFAULT_SCHOOL_NAMES.ar,schoolNameEn:DEFAULT_SCHOOL_NAMES.en,schoolLogo:DEFAULT_SCHOOL_LOGO}};
 let user = null;
 let impRows = [];
@@ -1221,7 +1267,7 @@ function visibleClasses(){
 function visibleStudents(){const ids=new Set(visibleClasses().map(c=>c.id));return Object.values(db.students||{}).filter(s=>ids.has(s.classId));}
 function programLabel(program){return LANG==='ar'?(program==='international'?'الدولي':'الأهلي'):(program==='international'?'International':'National');}
 function sectionLabel(section){
-  const labels={dashboard:['لوحة التحكم','Dashboard'],attendance:['الحضور','Attendance'],students_edit:['الطلاب','Students'],classes:['الفصول','Classes'],teachers:['المستخدمون','Users'],reports:['التقارير','Reports'],notifications:['الإشعارات','Notifications'],permissions:['الصلاحيات','Permissions'],settings:['الإعدادات','Settings']};
+  const labels={dashboard:['لوحة الحضور','Attendance Dashboard'],attendance:['الحضور','Attendance'],students_edit:['الطلاب','Students'],classes:['الفصول','Classes'],teachers:['المستخدمون','Users'],reports:['تقارير الحضور','Attendance Reports'],notifications:['الإشعارات','Notifications'],behavior_dashboard:['لوحة السلوك','Behavior Dashboard'],behavior_record:['تسجيل السلوك','Record Behavior'],behavior_manage:['إدارة حالات السلوك','Behavior Cases'],behavior_reports:['تقارير السلوك','Behavior Reports'],behavior_reference:['أدلة السلوك','Behavior Guides'],permissions:['الصلاحيات','Permissions'],settings:['الإعدادات','Settings']};
   return labels[section]?.[LANG==='ar'?0:1]||section;
 }
 function roleAllows(role,permission){return !!(db.permissions?.[role]?.[permission]??DEFAULT_PERMS?.[role]?.[permission]);}
@@ -1231,7 +1277,8 @@ function effectiveUserSections(account){
   const hasSelections=Object.keys(selected).length>0;
   return USER_SECTIONS.filter(section=>roleAllows(account.role,section)&&(!hasSelections||selected[section]!==false));
 }
-function emptySemester(){return{attendance:{},notifications:[]};}
+function emptyBehaviorState(){return{violations:[],positives:[],nextViolationId:1,nextPositiveId:1,audit:[]};}
+function emptySemester(){return{attendance:{},notifications:[],behavior:emptyBehaviorState()};}
 function emptyAcademicYear(label,classes={}){
   return{label,classes:copyData(classes),students:{},semesters:{'1':emptySemester(),'2':emptySemester()}};
 }
@@ -1298,6 +1345,12 @@ function ensureAcademicModel(){
       if(!year.semesters[sem])year.semesters[sem]=emptySemester();
       year.semesters[sem].attendance=normalizeDailyAttendance(year.semesters[sem].attendance||{});
       year.semesters[sem].notifications=normalizeDailyNotifications(year.semesters[sem].notifications||[]);
+      const behavior=year.semesters[sem].behavior||(year.semesters[sem].behavior=emptyBehaviorState());
+      behavior.violations=Array.isArray(behavior.violations)?behavior.violations:[];
+      behavior.positives=Array.isArray(behavior.positives)?behavior.positives:[];
+      behavior.nextViolationId=Math.max(Number(behavior.nextViolationId)||1,behavior.violations.length+1);
+      behavior.nextPositiveId=Math.max(Number(behavior.nextPositiveId)||1,behavior.positives.length+1);
+      behavior.audit=Array.isArray(behavior.audit)?behavior.audit:[];
     });
   });
   if(!db.academicYears[db.activeAcademicYear])db.activeAcademicYear=Object.keys(db.academicYears).sort().reverse()[0];
@@ -1412,7 +1465,7 @@ async function getStaffProfileWithRetry(userId){
   }
   return lastResult;
 }
-async function connectAuthenticatedUser(sessionResult=null){
+async function connectAuthenticatedUser(sessionResult=null,requireAppChoice=false){
   sessionResult=sessionResult||await window.neonClient.auth.getSession();
   const authUser=authUserFrom(sessionResult);
   if(!authUser)return false;
@@ -1433,6 +1486,9 @@ async function connectAuthenticatedUser(sessionResult=null){
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display=user.role==='admin'?'':'none');
   await initApp();
   localStorage.setItem('najd_attendance_session','active');
+  const savedApp=localStorage.getItem('najd_platform_app');
+  if(requireAppChoice||!savedApp)window.showAppChooser?.();
+  else window.selectPlatformApp?.(savedApp,false);
   return true;
 }
 async function doLogin(){
@@ -1444,7 +1500,7 @@ async function doLogin(){
     await window.neonReady;
     const result=await window.neonClient.auth.signIn.email({email,password:pass});
     if(result?.error)throw result.error;
-    if(!(await connectAuthenticatedUser()))return;
+    if(!(await connectAuthenticatedUser(null,true)))return;
   }catch(e){toast(e?.message||t('loginError'));}
   finally{button.disabled=false;}
 }
@@ -1453,6 +1509,7 @@ async function doLogout(){
   try{if(user){syncActiveAcademicData();await persistState(copyData(db));}await window.neonClient.auth.signOut();}catch(e){}
   localStorage.removeItem('najd_attendance_session');
   user=null;
+  const chooser=document.getElementById('appChooser');if(chooser)chooser.style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('loginPage').style.display='flex';
 }
@@ -1490,6 +1547,7 @@ async function changeOwnPassword(){
 // ════════════════════════════════════════════
 async function initApp(){
   await load();
+  window.initBehaviorModule?.();
   applyLang();
   const d=new Date();
   document.getElementById('tbDate').textContent='📅 '+d.toLocaleDateString(LANG==='ar'?'ar-SA':'en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -1516,8 +1574,10 @@ function applySchoolBranding(){
   const loginName=document.getElementById('loginSubtitle');
   const arabicNameField=document.getElementById('settingsSchoolNameAr');
   const englishNameField=document.getElementById('settingsSchoolNameEn');
+  const chooserSchool=document.getElementById('chooserSchool');
   if(sidebarName)sidebarName.textContent=name;
   if(loginName)loginName.textContent=name;
+  if(chooserSchool)chooserSchool.textContent=name;
   if(arabicNameField)arabicNameField.value=s.schoolNameAr;
   if(englishNameField)englishNameField.value=s.schoolNameEn;
   if(s.schoolLogo){
@@ -1529,6 +1589,10 @@ function applySchoolBranding(){
     const lImg=document.getElementById('loginLogoImg');
     lImg.src=s.schoolLogo; lImg.style.display='block';
     document.getElementById('loginLogoPlaceholder').style.display='none';
+    const chooserImg=document.getElementById('chooserLogo');
+    if(chooserImg){chooserImg.src=s.schoolLogo;chooserImg.style.display='block';}
+    const chooserPlaceholder=document.getElementById('chooserLogoPlaceholder');
+    if(chooserPlaceholder)chooserPlaceholder.style.display='none';
     // Settings preview
     const sp=document.getElementById('settingsLogoPreview');
     sp.innerHTML=`<img src="${s.schoolLogo}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius)">`;
@@ -1623,6 +1687,7 @@ function refreshAcademicViews(){
   const attRows=document.getElementById('attRows');
   if(attRows)attRows.innerHTML='';
   if(document.getElementById('page-notifications').classList.contains('active'))renderNotifTable();
+  window.refreshBehaviorContext?.();
 }
 
 function changeAcademicYear(year){
@@ -1726,6 +1791,7 @@ function applyUserPermissions(){
     if(match)item.style.display=pageAllowed(match[1])?'':'none';
   });
   document.querySelectorAll('[data-permission]').forEach(el=>{el.style.display=hasPermission(el.dataset.permission)?'':'none';});
+  window.applyBehaviorPermissions?.();
 }
 
 function goPage(name,el){
@@ -2402,13 +2468,13 @@ function resetNotifFilters(){
 // PERMISSIONS — EDITABLE TOGGLES
 // ════════════════════════════════════════════
 function renderPerms(){
-  const perms=['dashboard','attendance','students_edit','students_delete','classes','teachers','reports','export','notifications','permissions','settings'];
+  const perms=['dashboard','attendance','students_edit','students_delete','classes','teachers','reports','export','notifications','behavior_dashboard','behavior_record','behavior_manage','behavior_reports','behavior_reference','permissions','settings'];
   const roles=['admin','principal','teacher','supervisor'];
   if(!db.permissions) db.permissions=JSON.parse(JSON.stringify(DEFAULT_PERMS));
   document.getElementById('permTbody').innerHTML=perms.map(perm=>{
     const lbl=PERM_LABELS[LANG][perm]||perm;
     const cells=roles.map(role=>{
-      const checked=db.permissions[role]&&db.permissions[role][perm]?'checked':'';
+      const checked=roleAllows(role,perm)?'checked':'';
       const disabled=role==='admin'?'disabled':''; // admin always has all
       return`<td style="text-align:center">
         <label class="perm-toggle">

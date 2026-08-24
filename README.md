@@ -1,6 +1,6 @@
-# Najd Schools Attendance
+# Najd Schools Attendance & Behavior Platform
 
-Bilingual Arabic/English attendance management web app for Najd Schools.
+Bilingual Arabic/English student attendance and behavior platform for Najd Schools.
 
 ## Features
 
@@ -11,9 +11,12 @@ Bilingual Arabic/English attendance management web app for Najd Schools.
 - Bilingual class and section names
 - Persistent Neon Auth sessions
 - Neon Postgres database and row-level security
+- One post-login launcher for Attendance and Behavior
+- Shared users, students, classes, academic context, and permission scopes
+- Behavioral violations, official interventions, positive behavior, reports, and audit history
 - Vercel-ready Vite build
 
-Student records and credentials are stored in Neon and are not committed to this repository.
+Student records, behavior records, and credentials are stored in Neon and are not committed to this repository. Attendance and Behavior data share the same `school_state` record; each academic year contains two independent semester records.
 
 ## Development
 
