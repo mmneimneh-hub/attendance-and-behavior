@@ -168,7 +168,7 @@ CREATE POLICY semesters_manage ON semesters
 DROP POLICY IF EXISTS staff_read ON staff_profiles;
 CREATE POLICY staff_read ON staff_profiles
   FOR SELECT TO authenticated
-  USING (user_id = auth.user_id() OR app_private.current_app_role() = 'admin');
+  USING (app_private.current_app_role() IS NOT NULL);
 DROP POLICY IF EXISTS staff_manage ON staff_profiles;
 CREATE POLICY staff_manage ON staff_profiles
   FOR ALL TO authenticated

@@ -602,8 +602,6 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         <div class="ch"><h3>📋 <span data-ar="بيانات الحضور اليومي" data-en="Daily Attendance Details">بيانات الحضور اليومي</span></h3></div>
         <div class="cb">
           <div class="fg" style="margin-bottom:14px">
-            <div class="ff"><label data-ar="المعلم *" data-en="Teacher *">المعلم *</label>
-              <select id="attTeacher" onchange="checkDup()"><option value="">—</option></select></div>
             <div class="ff"><label data-ar="التاريخ *" data-en="Date *">التاريخ *</label>
               <input type="date" id="attDate" onchange="attDateChange()"></div>
             <div class="ff"><label data-ar="اليوم" data-en="Day">اليوم</label>
@@ -647,7 +645,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
           <h3>👥 <span data-ar="إدارة الطلاب" data-en="Student Management">إدارة الطلاب</span></h3>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-p btn-sm" data-permission="students_edit" onclick="openM('mStu')">➕ <span data-ar="إضافة طالب" data-en="Add Student">إضافة طالب</span></button>
-          <button class="btn btn-out btn-sm" data-permission="students_edit" onclick="openM('mImport')">📥 <span data-ar="استيراد" data-en="Import">استيراد</span></button>
+          <button class="btn btn-out btn-sm" data-permission="roster_import" onclick="openM('mImport')">📥 <span data-ar="استيراد الفصول والطلاب" data-en="Import Classes & Students">استيراد الفصول والطلاب</span></button>
           </div>
         </div>
         <div class="cb">
@@ -930,7 +928,6 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
   <div class="mb" style="max-width:520px">
     <h3>🔑 <span data-ar="تغيير كلمة المرور" data-en="Change Password">تغيير كلمة المرور</span></h3>
     <div class="fg" style="grid-template-columns:1fr">
-      <div class="ff"><label data-ar="كلمة المرور الحالية *" data-en="Current Password *">كلمة المرور الحالية *</label><input type="password" id="currentPassword" autocomplete="current-password"></div>
       <div class="ff"><label data-ar="كلمة المرور الجديدة *" data-en="New Password *">كلمة المرور الجديدة *</label><input type="password" id="newPassword" minlength="8" autocomplete="new-password"></div>
       <div class="ff"><label data-ar="تأكيد كلمة المرور الجديدة *" data-en="Confirm New Password *">تأكيد كلمة المرور الجديدة *</label><input type="password" id="confirmNewPassword" minlength="8" autocomplete="new-password"></div>
       <label style="display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--slate-600)"><input type="checkbox" id="revokeOtherSessions" checked> <span data-ar="تسجيل الخروج من الأجهزة الأخرى" data-en="Sign out from other devices">تسجيل الخروج من الأجهزة الأخرى</span></label>
@@ -942,22 +939,41 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
   </div>
 </div>
 
-<div class="mo" id="mImport">
-  <div class="mb">
-    <h3>📥 <span data-ar="استيراد الطلاب" data-en="Import Students">استيراد الطلاب</span></h3>
-    <div class="ff" style="margin-bottom:14px"><label data-ar="الفصل المستهدف *" data-en="Target Class *">الفصل المستهدف *</label><select id="impCls" style="width:100%;padding:9px 13px;border-radius:var(--radius);border:1.5px solid var(--slate-200);font-family:inherit;font-size:.88rem;outline:none"></select></div>
-    <div class="logo-upload-area" onclick="document.getElementById('impFile').click()" ondragover="event.preventDefault();this.style.borderColor='var(--brand)'" ondragleave="this.style.borderColor='var(--slate-300)'" ondrop="event.preventDefault();this.style.borderColor='var(--slate-300)';if(event.dataTransfer.files[0])handleImpFile(event.dataTransfer.files[0])">
-      <div style="font-size:2rem;margin-bottom:6px">📂</div>
-      <div style="font-size:.84rem;color:var(--slate-400)"><strong style="color:var(--brand)" data-ar="اسحب الملف هنا" data-en="Drag file here">اسحب الملف هنا</strong> — Excel / CSV / TXT</div>
-    </div>
-    <input type="file" id="impFile" accept=".xlsx,.xls,.csv,.txt" style="display:none" onchange="handleImpFile(this.files[0])">
-    <div id="impPrev" style="display:none;margin-top:10px"></div>
-    <div style="margin-top:12px">
-      <label style="font-weight:600;font-size:.8rem;color:var(--slate-500)" data-ar="أو أدخل الأسماء يدوياً:" data-en="Or enter names manually:">أو أدخل الأسماء يدوياً:</label>
-      <textarea id="impManual" rows="4" style="width:100%;margin-top:5px;padding:9px;border-radius:var(--radius);border:1.5px solid var(--slate-200);font-family:inherit;font-size:.84rem;resize:vertical;outline:none" placeholder="أحمد محمد...&#10;خالد عبدالله..."></textarea>
+<div class="mo" id="mAdminPassword">
+  <div class="mb" style="max-width:520px">
+    <h3>🔐 <span data-ar="إعادة تعيين كلمة مرور المستخدم" data-en="Reset User Password">إعادة تعيين كلمة مرور المستخدم</span></h3>
+    <input type="hidden" id="adminPasswordUserId">
+    <div class="fg" style="grid-template-columns:1fr">
+      <div class="ff"><label data-ar="المستخدم" data-en="User">المستخدم</label><input type="text" id="adminPasswordUser" readonly></div>
+      <div class="ff"><label data-ar="كلمة المرور الجديدة *" data-en="New Password *">كلمة المرور الجديدة *</label><input type="password" id="adminNewPassword" minlength="8" autocomplete="new-password"></div>
+      <div class="ff"><label data-ar="تأكيد كلمة المرور *" data-en="Confirm Password *">تأكيد كلمة المرور *</label><input type="password" id="adminConfirmPassword" minlength="8" autocomplete="new-password"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--slate-600)"><input type="checkbox" id="adminRevokeSessions" checked> <span data-ar="تسجيل خروج المستخدم من جميع الأجهزة" data-en="Sign the user out from all devices">تسجيل خروج المستخدم من جميع الأجهزة</span></label>
     </div>
     <div class="ma">
-      <button class="btn btn-p" onclick="doImport()">✅ <span data-ar="استيراد" data-en="Import">استيراد</span></button>
+      <button class="btn btn-p" id="adminPasswordBtn" onclick="resetUserPassword()">🔑 <span data-ar="إعادة تعيين" data-en="Reset Password">إعادة تعيين</span></button>
+      <button class="btn btn-gr" onclick="closeM('mAdminPassword')"><span data-ar="إلغاء" data-en="Cancel">إلغاء</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="mo" id="mImport">
+  <div class="mb">
+    <h3>📥 <span data-ar="استيراد الفصول والطلاب" data-en="Import Classes & Students">استيراد الفصول والطلاب</span></h3>
+    <div class="alert alert-i" style="align-items:flex-start">
+      <span>ℹ️</span><span data-ar="سيتم الاستيراد إلى السنة الدراسية المفتوحة. ينشئ الملف الفصول غير الموجودة ويضيف الطلاب أو يحدّثهم حسب الرقم المدرسي، ضمن صلاحيات المستخدم المسجل فقط." data-en="The file imports into the open scholastic year. It creates missing classes and adds or updates students by School ID, within the signed-in user's permissions only.">سيتم الاستيراد إلى السنة الدراسية المفتوحة ضمن صلاحيات المستخدم المسجل فقط.</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <span id="impYear" class="badge bg-b"></span>
+      <a class="btn btn-out btn-sm" href="/attendance-import-template.xlsx" download>⬇️ <span data-ar="تحميل نموذج Excel" data-en="Download Excel Template">تحميل نموذج Excel</span></a>
+    </div>
+    <div class="logo-upload-area" onclick="document.getElementById('impFile').click()" ondragover="event.preventDefault();this.style.borderColor='var(--brand)'" ondragleave="this.style.borderColor='var(--slate-300)'" ondrop="event.preventDefault();this.style.borderColor='var(--slate-300)';if(event.dataTransfer.files[0])handleImpFile(event.dataTransfer.files[0])">
+      <div style="font-size:2rem;margin-bottom:6px">📂</div>
+      <div style="font-size:.84rem;color:var(--slate-400)"><strong style="color:var(--brand)" data-ar="اسحب الملف هنا أو انقر للاختيار" data-en="Drag the file here or click to browse">اسحب الملف هنا أو انقر للاختيار</strong> — Excel / CSV</div>
+    </div>
+    <input type="file" id="impFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImpFile(this.files[0])">
+    <div id="impPrev" style="display:none;margin-top:10px"></div>
+    <div class="ma">
+      <button class="btn btn-p" id="importRosterBtn" onclick="doImport()" disabled>✅ <span data-ar="تنفيذ الاستيراد" data-en="Run Import">تنفيذ الاستيراد</span></button>
       <button class="btn btn-gr" onclick="closeM('mImport')"><span data-ar="إلغاء" data-en="Cancel">إلغاء</span></button>
     </div>
   </div>
@@ -1079,6 +1095,8 @@ function applyLang(){
     const el=document.getElementById(id);
     if(el) el.textContent = vals[LANG]||vals['ar'];
   });
+  const roleEl=document.getElementById('sbRole');
+  if(roleEl&&typeof user!=='undefined'&&user)roleEl.textContent=t('roles')[user.role]||user.role;
   localStorage.setItem('lang', LANG);
   if(typeof db!=='undefined'&&db&&db.academicYears) renderAcademicControls();
 }
@@ -1136,7 +1154,8 @@ const GRADE_LEVELS = ['4','5','6','7','8','9','10','11','12'];
 const USER_SECTIONS = ['dashboard','attendance','students_edit','classes','teachers','reports','notifications','permissions','settings'];
 let db = {classes:{},students:{},teachers:{},attendance:{},notifications:[],academicYears:{},activeAcademicYear:DEFAULT_ACADEMIC_YEAR,activeSemester:'1',activeProgram:'national',permissions:JSON.parse(JSON.stringify(DEFAULT_PERMS)),settings:{schoolName:'مدارس نجد الأهلية',schoolLogo:DEFAULT_SCHOOL_LOGO}};
 let user = null;
-let impNames = [];
+let impRows = [];
+let impPlan = null;
 
 function copyData(value){return JSON.parse(JSON.stringify(value));}
 function classGrade(cls){return String(cls?.gradeLevel||String(cls?.id||'').match(/\d+/)?.[0]||'');}
@@ -1194,7 +1213,13 @@ function normalizeDailyAttendance(attendance){
         const status=record.status==='fullday'?'absent':(['present','absent','early'].includes(record.status)?record.status:'present');
         const previous=daily[studentId];
         const notes=[previous?.note,record.note].filter(Boolean);
-        if(!previous||(priority[status]||0)>=(priority[previous.status]||0))daily[studentId]={status,note:[...new Set(notes)].join(' | ')};
+        const attribution={
+          updatedBy:record.updatedBy||record.recordedBy||previous?.updatedBy||'',
+          updatedByEmail:record.updatedByEmail||previous?.updatedByEmail||'',
+          updatedByName:record.updatedByName||previous?.updatedByName||'',
+          updatedAt:record.updatedAt||previous?.updatedAt||''
+        };
+        if(!previous||(priority[status]||0)>=(priority[previous.status]||0))daily[studentId]={status,note:[...new Set(notes)].join(' | '),...attribution};
         else if(notes.length)previous.note=[...new Set(notes)].join(' | ');
       };
       Object.entries(stored||{}).forEach(([key,value])=>{
@@ -1400,22 +1425,27 @@ async function doLogout(){
 }
 
 async function changeOwnPassword(){
-  const currentPassword=document.getElementById('currentPassword').value;
   const newPassword=document.getElementById('newPassword').value;
   const confirmation=document.getElementById('confirmNewPassword').value;
-  if(!currentPassword||!newPassword||!confirmation){toast(LANG==='ar'?'أدخل جميع حقول كلمة المرور':'Complete all password fields');return;}
+  if(!newPassword||!confirmation){toast(LANG==='ar'?'أدخل كلمة المرور الجديدة وتأكيدها':'Enter and confirm the new password');return;}
   if(newPassword.length<8){toast(LANG==='ar'?'يجب ألا تقل كلمة المرور الجديدة عن 8 أحرف':'The new password must be at least 8 characters');return;}
   if(newPassword!==confirmation){toast(LANG==='ar'?'كلمتا المرور الجديدتان غير متطابقتين':'The new passwords do not match');return;}
-  if(newPassword===currentPassword){toast(LANG==='ar'?'اختر كلمة مرور جديدة مختلفة':'Choose a different new password');return;}
   const button=document.getElementById('changePasswordBtn');button.disabled=true;
   try{
     await window.neonReady;
-    const result=await window.neonClient.auth.changePassword({
-      currentPassword,
-      newPassword,
-      revokeOtherSessions:document.getElementById('revokeOtherSessions').checked
+    const token=await window.neonClient.auth.getJWTToken();
+    if(!token)throw new Error(LANG==='ar'?'انتهت جلسة الدخول. سجل الدخول مجدداً.':'Your session has expired. Please sign in again.');
+    const response=await fetch('/api/change-password',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+      body:JSON.stringify({newPassword})
     });
-    if(result?.error)throw result.error;
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(result.error||(LANG==='ar'?'تعذر تغيير كلمة المرور':'Could not change password'));
+    if(document.getElementById('revokeOtherSessions').checked){
+      const revokeResult=await window.neonClient.auth.revokeOtherSessions();
+      if(revokeResult?.error)console.warn('Password changed, but other sessions could not be revoked');
+    }
     closeM('mPassword');
     toast(LANG==='ar'?'✅ تم تغيير كلمة المرور':'✅ Password changed successfully');
   }catch(e){toast(e?.message||(LANG==='ar'?'تعذر تغيير كلمة المرور':'Could not change password'));}
@@ -1612,9 +1642,9 @@ function fillSelects(){
   const clsOpt = ()=>`<option value="">${LANG==='ar'?'كل الفصول':'All Classes'}</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
   const clsReq = ()=>`<option value="">—</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
   const tchOpt = ()=>`<option value="">—</option>`+tch.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  ['attClass','eStuCls','impCls','rStuCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=id==='attClass'||id==='rStuCls'?clsReq():clsOpt(); });
+  ['attClass','eStuCls','rStuCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=id==='attClass'||id==='rStuCls'?clsReq():clsOpt(); });
   ['stuClsF','rClsS','rPerCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsOpt(); });
-  ['attTeacher','eClsTch'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=tchOpt(); });
+  ['eClsTch'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=tchOpt(); });
   ['rMonS','rStuMon','rTopMon'].forEach(id=>{ const el=document.getElementById(id);if(el){const m=LANG==='ar'?MONTHS_AR:MONTHS_EN;el.innerHTML=`<option value="">${LANG==='ar'?'كل الأشهر':'All Months'}</option>`+m.map((mn,i)=>`<option value="${i+1}">${mn}</option>`).join('');} });
   const yr=new Date().getFullYear();
   ['rYrS','rStuYr','rTopYr'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=yr;});
@@ -1634,6 +1664,7 @@ const PAGE_PERMISSION={dashboard:'dashboard',attendance:'attendance',students:'s
 
 function hasPermission(permission){
   if(!user)return false;
+  if(permission==='roster_import')return hasPermission('students_edit')&&hasPermission('classes');
   if(user.role==='admin')return true;
   if(!roleAllows(user.role,permission))return false;
   const section=permissionSection(permission);
@@ -1703,8 +1734,7 @@ function loadAttTable(){
   if(!cls){card.style.display='none';return;}
   card.style.display='block';
   const clsObj=db.classes[cls];
-  const tch=db.teachers[document.getElementById('attTeacher').value];
-  document.getElementById('attCardTitle').textContent=`${clsObj?className(clsObj):cls} — ${date} — ${tch?tch.name:''}`;
+  document.getElementById('attCardTitle').textContent=`${clsObj?className(clsObj):cls} — ${date} — ${user?.name||user?.email||''}`;
   const students=visibleStudents().filter(s=>s.classId===cls).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
   const saved=(db.attendance[cls]&&db.attendance[cls][date])||{};
   let cp=0,ca=0,ce=0;
@@ -1734,6 +1764,15 @@ function loadAttTable(){
   }).join('');
 }
 
+function attendanceAttribution(){
+  return{
+    updatedBy:user?.id||'',
+    updatedByEmail:user?.email||'',
+    updatedByName:user?.name||'',
+    updatedAt:new Date().toISOString()
+  };
+}
+
 function setAtt(sid,status,btn){
   const cls=document.getElementById('attClass').value;
   const date=document.getElementById('attDate').value;
@@ -1741,7 +1780,7 @@ function setAtt(sid,status,btn){
   ensureAttRec(cls,date);
   const prev=db.attendance[cls][date][sid];
   const note=prev?prev.note:'';
-  db.attendance[cls][date][sid]={status,note};
+  db.attendance[cls][date][sid]={status,note,...attendanceAttribution()};
   if(status==='absent'){
     addNotif(sid,cls,date);
   } else {
@@ -1773,8 +1812,8 @@ function setNote(sid,note){
   const date=document.getElementById('attDate').value;
   if(!cls||!date)return;
   ensureAttRec(cls,date);
-  if(!db.attendance[cls][date][sid])db.attendance[cls][date][sid]={status:'present',note};
-  else db.attendance[cls][date][sid].note=note;
+  if(!db.attendance[cls][date][sid])db.attendance[cls][date][sid]={status:'present',note,...attendanceAttribution()};
+  else db.attendance[cls][date][sid]={...db.attendance[cls][date][sid],note,...attendanceAttribution()};
   save();
 }
 
@@ -1794,7 +1833,7 @@ function markAll(status){
   ensureAttRec(cls,date);
   visibleStudents().filter(s=>s.classId===cls).forEach(s=>{
     const prev=db.attendance[cls][date][s.id];
-    db.attendance[cls][date][s.id]={status,note:prev?prev.note:''};
+    db.attendance[cls][date][s.id]={status,note:prev?prev.note:'',...attendanceAttribution()};
     if(status==='absent')addNotif(s.id,cls,date);
     else db.notifications=db.notifications.filter(n=>!(n.studentId===s.id&&n.classId===cls&&n.date===date&&n.status==='pending'));
   });
@@ -1809,7 +1848,8 @@ function saveAttRecord(){
   if(!cls||!date){toast(t('selectRequired'));return;}
   ensureAttRec(cls,date);
   visibleStudents().filter(s=>s.classId===cls).forEach(s=>{
-    if(!db.attendance[cls][date][s.id])db.attendance[cls][date][s.id]={status:'present',note:''};
+    if(!db.attendance[cls][date][s.id])db.attendance[cls][date][s.id]={status:'present',note:'',...attendanceAttribution()};
+    else db.attendance[cls][date][s.id]={...db.attendance[cls][date][s.id],...attendanceAttribution()};
   });
   save(); toast(t('recordSaved'));
   setTimeout(()=>goToDashboard(), 800);
@@ -1911,7 +1951,7 @@ function renderTchTable(){
     <td>${(tc.gradeLevels||GRADE_LEVELS).map(g=>`<span class="badge bg-gr">${g}</span>`).join(' ')}</td>
     <td style="max-width:260px">${effectiveUserSections(tc).map(s=>`<span class="badge bg-gr">${sectionLabel(s)}</span>`).join(' ')}</td>
     <td><span class="badge ${tc.registered===false?'bg-o':tc.active?'bg-g':'bg-gr'}">${tc.registered===false?(LANG==='ar'?'بانتظار التسجيل':'Pending'):tc.active?(LANG==='ar'?'نشط':'Active'):(LANG==='ar'?'معطل':'Inactive')}</span></td>
-    <td><button class="btn btn-out btn-xs" onclick="editTch('${tc.id}')">✏️</button> <button class="btn btn-r btn-xs" onclick="delTch('${tc.id}')">🗑️</button></td>
+    <td><button class="btn btn-out btn-xs" onclick="editTch('${tc.id}')">✏️</button> ${user?.role==='admin'&&tc.registered!==false?`<button class="btn btn-out btn-xs" title="${LANG==='ar'?'إعادة تعيين كلمة المرور':'Reset Password'}" onclick="openAdminPassword('${tc.id}')">🔑</button>`:''} <button class="btn btn-r btn-xs" onclick="delTch('${tc.id}')">🗑️</button></td>
   </tr>`).join('')||`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--slate-400)">${t('noData')}</td></tr>`;
 }
 
@@ -2044,6 +2084,36 @@ async function saveTch(){
   finally{button.disabled=false;}
 }
 function editTch(id){const tc=db.teachers[id];if(!tc)return;setUserPasswordFields(false);document.getElementById('eTchId').value=tc.id;document.getElementById('eTchName').value=tc.name;document.getElementById('eTchEmail').value=tc.email;document.getElementById('eTchSubj').value=tc.subject||'';document.getElementById('eTchRole').value=tc.role||'teacher';document.querySelectorAll('.tch-program').forEach(el=>el.checked=(tc.programs||PROGRAMS).includes(el.value));document.querySelectorAll('.tch-grade').forEach(el=>el.checked=(tc.gradeLevels||GRADE_LEVELS).includes(el.value));syncUserSectionPermissionsFromRole(tc.sectionPermissions||{});openM('mTch',true);}
+function openAdminPassword(id){
+  if(user?.role!=='admin')return;
+  const target=db.teachers[id];if(!target||target.registered===false)return;
+  document.getElementById('adminPasswordUserId').value=target.id;
+  document.getElementById('adminPasswordUser').value=`${target.name} — ${target.email}`;
+  document.getElementById('adminNewPassword').value='';
+  document.getElementById('adminConfirmPassword').value='';
+  document.getElementById('adminRevokeSessions').checked=true;
+  openM('mAdminPassword',true);
+}
+async function resetUserPassword(){
+  if(user?.role!=='admin')return;
+  const userId=document.getElementById('adminPasswordUserId').value;
+  const password=document.getElementById('adminNewPassword').value;
+  const confirmation=document.getElementById('adminConfirmPassword').value;
+  if(!userId||password.length<8){toast(LANG==='ar'?'يجب ألا تقل كلمة المرور عن 8 أحرف':'Password must be at least 8 characters');return;}
+  if(password!==confirmation){toast(LANG==='ar'?'كلمتا المرور غير متطابقتين':'Passwords do not match');return;}
+  const button=document.getElementById('adminPasswordBtn');button.disabled=true;
+  try{
+    const passwordResult=await window.neonClient.auth.admin.setUserPassword({userId,newPassword:password});
+    if(passwordResult?.error)throw passwordResult.error;
+    if(document.getElementById('adminRevokeSessions').checked){
+      const revokeResult=await window.neonClient.auth.admin.revokeUserSessions({userId});
+      if(revokeResult?.error)throw revokeResult.error;
+    }
+    closeM('mAdminPassword');
+    toast(LANG==='ar'?'✅ تم تعيين كلمة المرور الجديدة':'✅ User password reset successfully');
+  }catch(error){toast(error?.message||(LANG==='ar'?'تعذر إعادة تعيين كلمة المرور':'Could not reset the password'));}
+  finally{button.disabled=false;}
+}
 async function delTch(id){
   if(!hasPermission('teachers'))return;
   if(!confirm(t('confirmDel')))return;
@@ -2314,20 +2384,228 @@ function togglePerm(role,perm,val){
 // ════════════════════════════════════════════
 // IMPORT
 // ════════════════════════════════════════════
-function handleImpFile(file){
-  const ext=file.name.split('.').pop().toLowerCase();
-  if(ext==='txt'||ext==='csv'){const r=new FileReader();r.onload=e=>{impNames=e.target.result.split('\n').map(n=>n.split(',')[0].replace(/"/g,'').trim()).filter(n=>n);showImpPrev();};r.readAsText(file,'UTF-8');}
-  else if(ext==='xlsx'||ext==='xls'){if(typeof XLSX==='undefined'){const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';sc.onload=()=>readXLSX(file);document.head.appendChild(sc);}else readXLSX(file);}
-  else toast(LANG==='ar'?'❌ نوع الملف غير مدعوم':'❌ Unsupported file type');
+const IMPORT_FIELDS=['classCode','classNameAr','classNameEn','program','grade','teacherEmail','studentName','schoolId','guardianName','guardianMobile','guardianEmail'];
+
+function escapeImportHtml(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+function cleanImportText(value){return String(value??'').replace(/[<>\u0000]/g,'').trim();}
+function westernDigits(value){const ar='٠١٢٣٤٥٦٧٨٩';return String(value??'').replace(/[٠-٩]/g,d=>String(ar.indexOf(d)));}
+function normalizeImportProgram(value){
+  const v=cleanImportText(value).toLowerCase();
+  if(['national','أهلي','الاهلي','الأهلي','وطني','الوطني'].includes(v))return'national';
+  if(['international','دولي','الدولي'].includes(v))return'international';
+  return'';
 }
-function readXLSX(file){const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const json=XLSX.utils.sheet_to_json(ws,{header:1});const hdr=json[0].map(h=>String(h||'').toLowerCase());const nc=hdr.findIndex(h=>h.includes('اسم')||h==='name');impNames=json.slice(nc>=0?1:0).map(row=>String((nc>=0?row[nc]:row[0])||'').trim()).filter(n=>n);showImpPrev();}catch(err){toast(LANG==='ar'?'❌ خطأ في قراءة Excel':'❌ Error reading Excel');}};r.readAsArrayBuffer(file);}
-function showImpPrev(){const pv=document.getElementById('impPrev');pv.style.display='block';pv.innerHTML=`<div style="background:var(--success-bg);color:var(--success);border-radius:var(--radius-sm);padding:9px;font-size:.82rem;font-weight:600;border:1px solid var(--success-border)">✅ ${impNames.length} ${LANG==='ar'?'اسم — أول 5:':'names — First 5:'} ${impNames.slice(0,5).join('، ')}</div>`;}
+function importHeaderKey(value){
+  const raw=cleanImportText(value).replace(/^\ufeff/,'');
+  const left=raw.split('|')[0].trim().toLowerCase().replace(/[()\[\].]/g,' ').replace(/[\s-]+/g,'_').replace(/^_+|_+$/g,'');
+  const aliases={
+    class_code:'classCode',code:'classCode',class_id:'classCode',
+    class_name_ar:'classNameAr',name_ar:'classNameAr',arabic_class_name:'classNameAr',
+    class_name_en:'classNameEn',name_en:'classNameEn',english_class_name:'classNameEn',
+    program:'program',grade:'grade',grade_level:'grade',
+    teacher_email:'teacherEmail',responsible_teacher_email:'teacherEmail',
+    student_name:'studentName',name:'studentName',school_id:'schoolId',student_id:'schoolId',
+    guardian_name:'guardianName',parent_name:'guardianName',guardian_mobile:'guardianMobile',guardian_phone:'guardianMobile',parent_phone:'guardianMobile',
+    guardian_email:'guardianEmail',parent_email:'guardianEmail'
+  };
+  if(aliases[left])return aliases[left];
+  if(raw.includes('رمز الفصل'))return'classCode';
+  if(raw.includes('اسم الفصل')&&raw.includes('العرب'))return'classNameAr';
+  if(raw.includes('اسم الفصل')&&(raw.includes('الإنج')||raw.includes('الانج')))return'classNameEn';
+  if(raw.includes('البرنامج'))return'program';
+  if(raw.includes('الصف'))return'grade';
+  if(raw.includes('بريد المعلم'))return'teacherEmail';
+  if(raw.includes('اسم الطالب'))return'studentName';
+  if(raw.includes('الرقم المدرسي'))return'schoolId';
+  if(raw.includes('اسم ولي الأمر'))return'guardianName';
+  if(raw.includes('جوال ولي الأمر')||raw.includes('هاتف ولي الأمر'))return'guardianMobile';
+  if(raw.includes('بريد ولي الأمر'))return'guardianEmail';
+  return'';
+}
+
+function importRowsFromGrid(grid){
+  let headerIndex=-1,headerKeys=[];
+  const limit=Math.min(grid.length,20);
+  for(let i=0;i<limit;i++){
+    const keys=(grid[i]||[]).map(importHeaderKey);
+    if(keys.filter(Boolean).length>headerKeys.filter(Boolean).length){headerIndex=i;headerKeys=keys;}
+  }
+  const required=['classCode','classNameAr','classNameEn','program','grade','studentName','schoolId'];
+  const missing=required.filter(key=>!headerKeys.includes(key));
+  if(headerIndex<0||missing.length)throw new Error(`${LANG==='ar'?'أعمدة مطلوبة مفقودة':'Missing required columns'}: ${missing.join(', ')}`);
+  return grid.slice(headerIndex+1).map((cells,index)=>{
+    const row={_row:headerIndex+index+2};
+    IMPORT_FIELDS.forEach(key=>{row[key]='';});
+    headerKeys.forEach((key,col)=>{if(key)row[key]=cleanImportText((cells||[])[col]);});
+    return row;
+  }).filter(row=>IMPORT_FIELDS.some(key=>row[key]!==''));
+}
+
+function addImportError(errorMap,row,message){
+  if(!errorMap.has(row._row))errorMap.set(row._row,[]);
+  errorMap.get(row._row).push(message);
+}
+
+function buildImportPlan(rows){
+  const errors=new Map();
+  const emailOk=value=>!value||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const teacherByEmail=new Map(Object.values(db.teachers||{}).filter(tc=>tc.email).map(tc=>[tc.email.toLowerCase(),tc]));
+  const prepared=rows.map(source=>{
+    const row={...source};
+    row.classCode=cleanImportText(row.classCode).toLowerCase();
+    row.classNameAr=cleanImportText(row.classNameAr);
+    row.classNameEn=cleanImportText(row.classNameEn);
+    row.program=normalizeImportProgram(row.program);
+    row.grade=westernDigits(cleanImportText(row.grade)).replace(/\.0$/,'');
+    row.teacherEmail=cleanImportText(row.teacherEmail).toLowerCase();
+    row.studentName=cleanImportText(row.studentName);
+    row.schoolId=cleanImportText(row.schoolId);
+    row.guardianName=cleanImportText(row.guardianName);
+    row.guardianMobile=cleanImportText(row.guardianMobile);
+    row.guardianEmail=cleanImportText(row.guardianEmail).toLowerCase();
+    row.teacher=row.teacherEmail?teacherByEmail.get(row.teacherEmail):null;
+    return row;
+  });
+
+  prepared.forEach(row=>{
+    if(!row.classCode)addImportError(errors,row,LANG==='ar'?'رمز الفصل مطلوب':'Class Code is required');
+    else if(!/^[a-z0-9_-]+$/i.test(row.classCode))addImportError(errors,row,LANG==='ar'?'رمز الفصل يقبل حروفاً لاتينية وأرقاماً وشرطة فقط':'Class Code may use Latin letters, numbers, hyphens, and underscores only');
+    if(!row.classNameAr)addImportError(errors,row,LANG==='ar'?'اسم الفصل بالعربية مطلوب':'Arabic class name is required');
+    if(!row.classNameEn)addImportError(errors,row,LANG==='ar'?'اسم الفصل بالإنجليزية مطلوب':'English class name is required');
+    if(!row.program)addImportError(errors,row,LANG==='ar'?'البرنامج يجب أن يكون national أو international':'Program must be national or international');
+    else if(!allowedPrograms().includes(row.program))addImportError(errors,row,LANG==='ar'?'البرنامج خارج صلاحيات المستخدم':'Program is outside the signed-in user permissions');
+    if(!GRADE_LEVELS.includes(row.grade))addImportError(errors,row,LANG==='ar'?'الصف يجب أن يكون من 4 إلى 12':'Grade must be from 4 to 12');
+    else if(!allowedGrades().includes(row.grade))addImportError(errors,row,LANG==='ar'?'الصف خارج صلاحيات المستخدم':'Grade is outside the signed-in user permissions');
+    if(!row.studentName)addImportError(errors,row,LANG==='ar'?'اسم الطالب مطلوب':'Student Name is required');
+    if(!row.schoolId)addImportError(errors,row,LANG==='ar'?'الرقم المدرسي مطلوب':'School ID is required');
+    if(!emailOk(row.teacherEmail))addImportError(errors,row,LANG==='ar'?'بريد المعلم غير صحيح':'Responsible Teacher Email is invalid');
+    else if(row.teacherEmail&&!row.teacher)addImportError(errors,row,LANG==='ar'?'المعلم غير موجود كمستخدم نشط':'Responsible teacher is not an active user');
+    if(!emailOk(row.guardianEmail))addImportError(errors,row,LANG==='ar'?'بريد ولي الأمر غير صحيح':'Guardian Email is invalid');
+    const existing=db.classes[row.classCode];
+    if(existing){
+      normalizeClassScope(existing);
+      if(existing.program!==row.program||classGrade(existing)!==row.grade)addImportError(errors,row,LANG==='ar'?'رمز الفصل موجود ببرنامج أو صف مختلف':'Class Code already exists with a different program or grade');
+    }
+  });
+
+  const classRows=new Map();
+  prepared.forEach(row=>{
+    if(!row.classCode)return;
+    if(!classRows.has(row.classCode))classRows.set(row.classCode,[]);
+    classRows.get(row.classCode).push(row);
+  });
+  classRows.forEach(classGroup=>{
+    const signatures=new Set(classGroup.map(row=>[row.classNameAr,row.classNameEn,row.program,row.grade,row.teacherEmail].join('|')));
+    if(signatures.size>1)classGroup.forEach(row=>addImportError(errors,row,LANG==='ar'?'بيانات الفصل غير متطابقة بين الصفوف':'Class details conflict across rows'));
+  });
+
+  const schoolRows=new Map();
+  prepared.forEach(row=>{
+    const key=row.schoolId.toLowerCase();if(!key)return;
+    if(!schoolRows.has(key))schoolRows.set(key,[]);
+    schoolRows.get(key).push(row);
+  });
+  schoolRows.forEach(studentRows=>{if(studentRows.length>1)studentRows.forEach(row=>addImportError(errors,row,LANG==='ar'?'الرقم المدرسي مكرر في الملف':'School ID is duplicated in the file'));});
+
+  const validRows=prepared.filter(row=>!errors.has(row._row));
+  const classes=new Map();
+  validRows.forEach(row=>{if(!classes.has(row.classCode))classes.set(row.classCode,row);});
+  const classesToCreate=[...classes.values()].filter(row=>!db.classes[row.classCode]);
+  const classesToUpdate=[...classes.values()].filter(row=>{
+    const existing=db.classes[row.classCode];
+    if(!existing)return false;normalizeClassScope(existing);
+    return existing.nameAr!==row.classNameAr||existing.nameEn!==row.classNameEn||(row.teacherEmail&&existing.teacherId!==row.teacher?.id);
+  });
+  const existingBySchoolId=new Map(Object.values(db.students||{}).filter(student=>student.schoolId).map(student=>[student.schoolId.toLowerCase(),student]));
+  const studentsToUpdate=validRows.filter(row=>existingBySchoolId.has(row.schoolId.toLowerCase()));
+  const studentsToCreate=validRows.filter(row=>!existingBySchoolId.has(row.schoolId.toLowerCase()));
+  return{
+    rows:validRows,
+    errors:[...errors.entries()].map(([row,messages])=>({row,messages:[...new Set(messages)]})).sort((a,b)=>a.row-b.row),
+    classesToCreate,classesToUpdate,studentsToCreate,studentsToUpdate,existingBySchoolId
+  };
+}
+
+function ensureXlsxLibrary(){
+  if(window.XLSX)return Promise.resolve(window.XLSX);
+  if(window.__xlsxLoadPromise)return window.__xlsxLoadPromise;
+  window.__xlsxLoadPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload=()=>resolve(window.XLSX);
+    script.onerror=()=>reject(new Error(LANG==='ar'?'تعذر تحميل قارئ Excel':'Could not load the Excel reader'));
+    document.head.appendChild(script);
+  });
+  return window.__xlsxLoadPromise;
+}
+
+function readImportFile(file,asText=false){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);
+    if(asText)reader.readAsText(file,'UTF-8');else reader.readAsArrayBuffer(file);
+  });
+}
+
+async function handleImpFile(file){
+  if(!file||!hasPermission('roster_import'))return;
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(!['xlsx','xls','csv'].includes(ext)){toast(LANG==='ar'?'❌ نوع الملف غير مدعوم':'❌ Unsupported file type');return;}
+  const preview=document.getElementById('impPrev');
+  preview.style.display='block';preview.innerHTML=`<div class="alert alert-i">⏳ ${LANG==='ar'?'جاري قراءة الملف...':'Reading the file...'}</div>`;
+  document.getElementById('importRosterBtn').disabled=true;
+  try{
+    await ensureXlsxLibrary();
+    const content=await readImportFile(file,ext==='csv');
+    const workbook=XLSX.read(content,{type:ext==='csv'?'string':'array'});
+    const sheet=workbook.Sheets['Import Data']||workbook.Sheets[workbook.SheetNames[0]];
+    const grid=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false});
+    impRows=importRowsFromGrid(grid);
+    if(!impRows.length)throw new Error(LANG==='ar'?'لا توجد صفوف بيانات في الملف':'The file has no data rows');
+    impPlan=buildImportPlan(impRows);
+    showImpPrev(file.name);
+  }catch(error){
+    impRows=[];impPlan=null;
+    preview.innerHTML=`<div class="alert alert-w">❌ ${escapeImportHtml(error?.message||(LANG==='ar'?'تعذر قراءة الملف':'Could not read the file'))}</div>`;
+  }
+}
+
+function showImpPrev(fileName=''){
+  const pv=document.getElementById('impPrev');if(!impPlan)return;
+  const ok=impPlan.rows.length>0&&impPlan.errors.length===0;
+  document.getElementById('importRosterBtn').disabled=!ok;
+  const cards=[
+    [impPlan.classesToCreate.length,LANG==='ar'?'فصول جديدة':'New Classes'],
+    [impPlan.classesToUpdate.length,LANG==='ar'?'فصول محدّثة':'Updated Classes'],
+    [impPlan.studentsToCreate.length,LANG==='ar'?'طلاب جدد':'New Students'],
+    [impPlan.studentsToUpdate.length,LANG==='ar'?'طلاب محدّثون':'Updated Students']
+  ];
+  const errorHtml=impPlan.errors.length?`<div class="alert alert-w" style="display:block;margin-top:10px"><strong>⚠️ ${impPlan.errors.length} ${LANG==='ar'?'صفوف تحتاج تصحيحاً':'rows need correction'}</strong><ul style="margin:8px 18px 0;padding:0">${impPlan.errors.slice(0,10).map(error=>`<li>${LANG==='ar'?'الصف':'Row'} ${error.row}: ${escapeImportHtml(error.messages.join(' · '))}</li>`).join('')}</ul>${impPlan.errors.length>10?`<div style="margin-top:6px">+${impPlan.errors.length-10}</div>`:''}</div>`:'';
+  pv.style.display='block';
+  pv.innerHTML=`<div style="font-size:.78rem;color:var(--slate-500);margin-bottom:8px">📄 ${escapeImportHtml(fileName)} · ${LANG==='ar'?'السنة':'Year'} ${escapeImportHtml(db.activeAcademicYear)}</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${cards.map(([value,label])=>`<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:var(--radius);padding:10px;text-align:center"><div style="font-size:1.15rem;font-weight:800;color:var(--brand)">${value}</div><div style="font-size:.74rem;color:var(--slate-500)">${label}</div></div>`).join('')}</div>${errorHtml}${ok?`<div class="alert alert-s" style="margin-top:10px;margin-bottom:0">✅ ${LANG==='ar'?'الملف صالح وجاهز للاستيراد':'The file is valid and ready to import'}</div>`:''}`;
+}
+
 function doImport(){
-  const cls=document.getElementById('impCls').value;if(!cls){toast(t('selectClass'));return;}
-  const manual=document.getElementById('impManual').value.split('\n').map(n=>n.trim()).filter(n=>n);
-  const all=[...impNames,...manual];if(!all.length){toast(t('noNames'));return;}
-  let added=0;all.forEach(name=>{db.students['s'+rnd()]={id:'s'+rnd(),name,schoolId:'',classId:cls,parent:'',parentPhone:'',parentEmail:''};added++;});
-  save();renderStuTable();renderDashboard();closeM('mImport');toast(`✅ ${LANG==='ar'?'تم استيراد':'Imported'} ${added} ${LANG==='ar'?'طالب':'students'}`);impNames=[];
+  if(!hasPermission('roster_import')||!impRows.length)return;
+  impPlan=buildImportPlan(impRows);
+  if(!impPlan.rows.length||impPlan.errors.length){showImpPrev();return;}
+  impPlan.classesToCreate.forEach(row=>{
+    db.classes[row.classCode]={id:row.classCode,name:row.classNameAr,nameAr:row.classNameAr,nameEn:row.classNameEn,program:row.program,gradeLevel:row.grade,teacherId:row.teacher?.id||''};
+    if(!db.attendance[row.classCode])db.attendance[row.classCode]={};
+  });
+  impPlan.classesToUpdate.forEach(row=>{
+    const existing=db.classes[row.classCode];
+    db.classes[row.classCode]={...existing,name:row.classNameAr,nameAr:row.classNameAr,nameEn:row.classNameEn,teacherId:row.teacherEmail?(row.teacher?.id||''):(existing.teacherId||'')};
+  });
+  impPlan.rows.forEach(row=>{
+    const existing=impPlan.existingBySchoolId.get(row.schoolId.toLowerCase());
+    const id=existing?.id||('s'+rnd());
+    db.students[id]={id,name:row.studentName,schoolId:row.schoolId,classId:row.classCode,parent:row.guardianName,parentPhone:row.guardianMobile,parentEmail:row.guardianEmail};
+  });
+  const classCount=impPlan.classesToCreate.length;
+  const studentCount=impPlan.studentsToCreate.length;
+  const updateCount=impPlan.studentsToUpdate.length;
+  save();refreshAcademicViews();closeM('mImport');
+  toast(LANG==='ar'?`✅ تم إنشاء ${classCount} فصل وإضافة ${studentCount} طالب وتحديث ${updateCount}`:`✅ Created ${classCount} classes, added ${studentCount} students, and updated ${updateCount}`);
 }
 
 // ════════════════════════════════════════════
@@ -2347,15 +2625,16 @@ function resetAllData(){
 // MODALS
 // ════════════════════════════════════════════
 function openM(id,preserve=false){
+  if(id==='mImport'&&!hasPermission('roster_import'))return;
   document.getElementById(id).classList.add('open');
   if(preserve)return;
   if(id==='mStu'){document.getElementById('eStuId').value='';['eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach(f=>document.getElementById(f).value='');document.getElementById('eStuCls').value='';}
   if(id==='mCls'){['eClsOld','eClsId','eClsNameAr','eClsNameEn'].forEach(f=>document.getElementById(f).value='');document.getElementById('eClsTch').value='';document.getElementById('eClsProgram').value=db.activeProgram||'national';document.getElementById('eClsGrade').value=allowedGrades()[0]||'4';}
   if(id==='mTch'){['eTchId','eTchName','eTchEmail','eTchSubj'].forEach(f=>document.getElementById(f).value='');setUserPasswordFields(true);document.getElementById('eTchRole').value='teacher';document.querySelectorAll('.tch-program,.tch-grade').forEach(el=>el.checked=true);syncUserSectionPermissionsFromRole();}
-  if(id==='mPassword'){['currentPassword','newPassword','confirmNewPassword'].forEach(f=>document.getElementById(f).value='');document.getElementById('revokeOtherSessions').checked=true;}
-  if(id==='mImport'){document.getElementById('impPrev').style.display='none';document.getElementById('impManual').value='';document.getElementById('impFile').value='';impNames=[];}
+  if(id==='mPassword'){['newPassword','confirmNewPassword'].forEach(f=>document.getElementById(f).value='');document.getElementById('revokeOtherSessions').checked=true;}
+  if(id==='mImport'){document.getElementById('impPrev').style.display='none';document.getElementById('impFile').value='';document.getElementById('importRosterBtn').disabled=true;document.getElementById('impYear').textContent=`${LANG==='ar'?'السنة الدراسية':'Scholastic Year'}: ${db.activeAcademicYear}`;impRows=[];impPlan=null;}
 }
-function closeM(id){document.getElementById(id).classList.remove('open');impNames=[];}
+function closeM(id){document.getElementById(id).classList.remove('open');if(id==='mImport'){impRows=[];impPlan=null;}}
 document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',function(e){if(e.target===this)closeM(this.id);}));
 
 // ════════════════════════════════════════════

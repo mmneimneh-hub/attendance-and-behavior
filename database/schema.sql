@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS staff_profiles (
   full_name text NOT NULL,
   role text NOT NULL CHECK (role IN ('admin', 'principal', 'teacher', 'supervisor')),
   programs text[] NOT NULL DEFAULT ARRAY['national','international']::text[],
-  grade_levels text[] NOT NULL DEFAULT ARRAY['4','5','6']::text[],
+  grade_levels text[] NOT NULL DEFAULT ARRAY['4','5','6','7','8','9','10','11','12']::text[],
   section_permissions jsonb NOT NULL DEFAULT '{}'::jsonb,
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS staff_invites (
   full_name text NOT NULL,
   role text NOT NULL CHECK (role IN ('admin', 'principal', 'teacher', 'supervisor')),
   programs text[] NOT NULL DEFAULT ARRAY['national','international']::text[],
-  grade_levels text[] NOT NULL DEFAULT ARRAY['4','5','6']::text[],
+  grade_levels text[] NOT NULL DEFAULT ARRAY['4','5','6','7','8','9','10','11','12']::text[],
   section_permissions jsonb NOT NULL DEFAULT '{}'::jsonb,
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS classes (
   name_ar text NOT NULL,
   name_en text,
   program text NOT NULL DEFAULT 'national' CHECK (program IN ('national','international')),
-  grade_level text NOT NULL DEFAULT '4' CHECK (grade_level IN ('4','5','6')),
+  grade_level text NOT NULL DEFAULT '4' CHECK (grade_level IN ('4','5','6','7','8','9','10','11','12')),
   teacher_user_id text REFERENCES staff_profiles(user_id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (academic_year_id, code)
@@ -85,13 +85,12 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   class_id uuid NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
   student_id uuid NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   attendance_date date NOT NULL,
-  period smallint NOT NULL CHECK (period BETWEEN 1 AND 8),
-  status text NOT NULL CHECK (status IN ('present', 'absent', 'early', 'full')),
+  status text NOT NULL CHECK (status IN ('present', 'absent', 'early')),
   note text,
   recorded_by text REFERENCES staff_profiles(user_id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (semester_id, student_id, attendance_date, period)
+  UNIQUE (semester_id, student_id, attendance_date)
 );
 
 CREATE INDEX IF NOT EXISTS attendance_by_date_class
