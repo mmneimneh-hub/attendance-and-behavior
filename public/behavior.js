@@ -148,12 +148,12 @@ function behaviorReportPeriod(kind){
 }
 function behaviorSemesterLabel(period){return period.semester==="both"?tr("الفصلان الأول والثاني","Semesters 1 & 2"):tr(period.semester==="1"?"الفصل الأول":"الفصل الثاني","Semester "+period.semester);}
 function behaviorReportClasses(kind){
-  var period=behaviorReportPeriod(kind),programs=allowedPrograms(),grades=allowedGrades();
+  var period=behaviorReportPeriod(kind),programs=allowedPrograms(),grades=allowedGrades(db.activeProgram);
   return Object.values(period.yearData.classes||{}).map(normalizeClassScope).filter(function(c){return c.program===db.activeProgram&&programs.includes(c.program)&&grades.includes(classGrade(c));});
 }
 function allowedBehaviorReportRecord(record,period){
   var cls=period.yearData.classes&&period.yearData.classes[record.classId],program=record.program||(cls&&normalizeClassScope(cls).program)||db.activeProgram,grade=String(record.grade||(cls&&classGrade(cls))||"");
-  return program===db.activeProgram&&allowedPrograms().includes(program)&&(!grade||allowedGrades().includes(grade));
+  return program===db.activeProgram&&allowedPrograms().includes(program)&&(!grade||allowedGrades(program).includes(grade));
 }
 function behaviorReportRecords(kind){
   var period=behaviorReportPeriod(kind),field=kind==="positive"?"positives":"violations",records=[];

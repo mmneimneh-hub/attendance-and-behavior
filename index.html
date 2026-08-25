@@ -207,6 +207,16 @@ tbody tr:hover td{background:var(--slate-50)}
 .ff input:focus,.ff select:focus,.ff textarea:focus{border-color:var(--brand);
   box-shadow:0 0 0 3px var(--brand-light)}
 .ff input[readonly]{background:var(--slate-50);color:var(--slate-500)}
+.program-grade-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.program-grade-group{min-width:0;margin:0;padding:12px;border:1px solid var(--slate-200);border-radius:var(--radius);background:var(--slate-50)}
+.program-grade-group legend{padding:0 7px;font-size:.8rem;font-weight:800;color:var(--brand)}
+.program-grade-options{display:grid;grid-template-columns:repeat(5,minmax(36px,1fr));gap:8px}
+.program-grade-options label{display:flex;align-items:center;gap:5px;margin:0;padding:5px 4px;border-radius:7px;background:white;border:1px solid var(--slate-100)}
+.program-grade-options input{width:auto}
+.program-grade-group.is-disabled{opacity:.5}
+.user-grade-scope{display:grid;gap:4px;min-width:170px}
+.user-grade-scope-row{display:flex;align-items:flex-start;gap:5px;flex-wrap:wrap}
+.user-grade-scope-row strong{min-width:72px;font-size:.72rem;color:var(--slate-500)}
 
 /* ══════════ BADGE ══════════ */
 .badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;
@@ -473,6 +483,7 @@ html[dir="ltr"] .att-row.r-full{border-left-color:var(--purple)}
   .ch{padding:11px 12px}
   .cb{padding:12px}
   .fg{grid-template-columns:minmax(0,1fr);gap:10px}
+  .program-grade-grid{grid-template-columns:minmax(0,1fr)}
   .sbar{display:grid!important;grid-template-columns:minmax(0,1fr)!important}
   .sbar input,.sbar select,.sbar .btn{width:100%!important;min-width:0}
   .att-hdr{display:none}
@@ -752,7 +763,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
           <select id="userStatusF" onchange="renderTchTable()"><option value="">كل الحالات / All Statuses</option><option value="active">Active</option><option value="pending">Pending</option><option value="inactive">Inactive</option></select>
         </div>
         <div class="tw"><table>
-          <thead><tr><th>#</th><th data-ar="الاسم" data-en="Name">الاسم</th><th data-ar="البريد" data-en="Email">البريد</th><th data-ar="التخصص" data-en="Subject">التخصص</th><th data-ar="الدور" data-en="Role">الدور</th><th data-ar="البرامج" data-en="Programs">البرامج</th><th data-ar="الصفوف" data-en="Grades">الصفوف</th><th data-ar="الأقسام" data-en="Sections">الأقسام</th><th data-ar="الحالة" data-en="Status">الحالة</th><th data-ar="إجراءات" data-en="Actions">إجراءات</th></tr></thead>
+          <thead><tr><th>#</th><th data-ar="الاسم" data-en="Name">الاسم</th><th data-ar="البريد" data-en="Email">البريد</th><th data-ar="التخصص" data-en="Subject">التخصص</th><th data-ar="الدور" data-en="Role">الدور</th><th data-ar="البرامج" data-en="Programs">البرامج</th><th data-ar="الصفوف حسب البرنامج" data-en="Grades by Program">الصفوف حسب البرنامج</th><th data-ar="الأقسام" data-en="Sections">الأقسام</th><th data-ar="الحالة" data-en="Status">الحالة</th><th data-ar="إجراءات" data-en="Actions">إجراءات</th></tr></thead>
           <tbody id="tchTbody"></tbody>
         </table></div>
       </div>
@@ -929,8 +940,8 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div class="ff"><label data-ar="رمز الفصل *" data-en="Class Code *">رمز الفصل *</label><input type="text" id="eClsId" placeholder="4a"></div>
       <div class="ff"><label data-ar="اسم الفصل / الشعبة بالعربية *" data-en="Class / Section Name in Arabic *">اسم الفصل / الشعبة بالعربية *</label><input type="text" id="eClsNameAr" placeholder="الرابع أ" dir="rtl"></div>
       <div class="ff"><label data-ar="اسم الفصل / الشعبة بالإنجليزية *" data-en="Class / Section Name in English *">اسم الفصل / الشعبة بالإنجليزية *</label><input type="text" id="eClsNameEn" placeholder="Grade 4 - A" dir="ltr"></div>
-      <div class="ff"><label data-ar="البرنامج" data-en="Program">البرنامج</label><select id="eClsProgram"><option value="national">أهلي / National</option><option value="international">دولي / International</option></select></div>
-      <div class="ff"><label data-ar="الصف" data-en="Grade">الصف</label><select id="eClsGrade"><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div>
+      <div class="ff"><label data-ar="البرنامج" data-en="Program">البرنامج</label><select id="eClsProgram" onchange="syncClassScopeOptions(this.value)"><option value="national">أهلي / National</option><option value="international">دولي / International</option></select></div>
+      <div class="ff"><label data-ar="الصف" data-en="Grade">الصف</label><select id="eClsGrade" onchange="syncClassResponsibleTeachers()"><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></div>
       <div class="ff"><label data-ar="المعلم المسؤول" data-en="Responsible Teacher">المعلم المسؤول</label><select id="eClsTch"></select></div>
     </div>
     <div class="ma">
@@ -960,21 +971,18 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       </div>
       <div class="ff"><label data-ar="البرامج المسموحة" data-en="Allowed Programs">البرامج المسموحة</label>
         <div style="display:flex;gap:14px;flex-wrap:wrap;padding:10px;border:1px solid var(--slate-200);border-radius:var(--radius)">
-          <label><input type="checkbox" class="tch-program" value="national" checked> <span data-ar="أهلي" data-en="National">أهلي</span></label>
-          <label><input type="checkbox" class="tch-program" value="international" checked> <span data-ar="دولي" data-en="International">دولي</span></label>
+          <label><input type="checkbox" class="tch-program" value="national" checked onchange="syncProgramGradePermissionInputs()"> <span data-ar="أهلي" data-en="National">أهلي</span></label>
+          <label><input type="checkbox" class="tch-program" value="international" checked onchange="syncProgramGradePermissionInputs()"> <span data-ar="دولي" data-en="International">دولي</span></label>
         </div>
       </div>
-      <div class="ff"><label data-ar="الصفوف المسموحة" data-en="Allowed Grades">الصفوف المسموحة</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;padding:10px;border:1px solid var(--slate-200);border-radius:var(--radius)">
-          <label><input type="checkbox" class="tch-grade" value="4" checked> 4</label>
-          <label><input type="checkbox" class="tch-grade" value="5" checked> 5</label>
-          <label><input type="checkbox" class="tch-grade" value="6" checked> 6</label>
-          <label><input type="checkbox" class="tch-grade" value="7" checked> 7</label>
-          <label><input type="checkbox" class="tch-grade" value="8" checked> 8</label>
-          <label><input type="checkbox" class="tch-grade" value="9" checked> 9</label>
-          <label><input type="checkbox" class="tch-grade" value="10" checked> 10</label>
-          <label><input type="checkbox" class="tch-grade" value="11" checked> 11</label>
-          <label><input type="checkbox" class="tch-grade" value="12" checked> 12</label>
+      <div class="ff" style="grid-column:1/-1"><label data-ar="الصفوف المسموحة حسب البرنامج" data-en="Allowed Grades by Program">الصفوف المسموحة حسب البرنامج</label>
+        <div class="program-grade-grid">
+          <fieldset class="program-grade-group" data-program-grade-group="national"><legend data-ar="أهلي" data-en="National">أهلي</legend><div class="program-grade-options">
+            <label><input type="checkbox" class="tch-program-grade" data-program="national" value="4" checked> 4</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="5" checked> 5</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="6" checked> 6</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="7" checked> 7</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="8" checked> 8</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="9" checked> 9</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="10" checked> 10</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="11" checked> 11</label><label><input type="checkbox" class="tch-program-grade" data-program="national" value="12" checked> 12</label>
+          </div></fieldset>
+          <fieldset class="program-grade-group" data-program-grade-group="international"><legend data-ar="دولي" data-en="International">دولي</legend><div class="program-grade-options">
+            <label><input type="checkbox" class="tch-program-grade" data-program="international" value="4" checked> 4</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="5" checked> 5</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="6" checked> 6</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="7" checked> 7</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="8" checked> 8</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="9" checked> 9</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="10" checked> 10</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="11" checked> 11</label><label><input type="checkbox" class="tch-program-grade" data-program="international" value="12" checked> 12</label>
+          </div></fieldset>
         </div>
       </div>
       <div class="ff" style="grid-column:1/-1"><label data-ar="الأقسام والصلاحيات" data-en="Sections and Permissions">الأقسام والصلاحيات</label>
@@ -1236,6 +1244,7 @@ const DEFAULT_ACADEMIC_YEAR = '2025-2026';
 const DEFAULT_SCHOOL_NAMES = {ar:'مدارس نجد الأهلية',en:'Najd National Schools'};
 const PROGRAMS = ['national','international'];
 const GRADE_LEVELS = ['4','5','6','7','8','9','10','11','12'];
+const PROGRAM_GRADE_PERMISSION_KEY = '__programGrades';
 const USER_SECTIONS = ['dashboard','attendance','students_edit','classes','teachers','reports','notifications','behavior_dashboard','behavior_record','behavior_manage','behavior_reports','behavior_reference','permissions','settings'];
 let db = {classes:{},students:{},teachers:{},attendance:{},notifications:[],academicYears:{},activeAcademicYear:DEFAULT_ACADEMIC_YEAR,activeSemester:'1',activeProgram:'national',permissions:JSON.parse(JSON.stringify(DEFAULT_PERMS)),settings:{schoolName:DEFAULT_SCHOOL_NAMES.ar,schoolNameAr:DEFAULT_SCHOOL_NAMES.ar,schoolNameEn:DEFAULT_SCHOOL_NAMES.en,schoolLogo:DEFAULT_SCHOOL_LOGO}};
 let user = null;
@@ -1277,10 +1286,20 @@ function className(cls,lang=LANG){
   return lang==='ar'?(cls.nameAr||cls.nameEn||cls.id):(cls.nameEn||cls.nameAr||cls.id);
 }
 function allowedPrograms(){return user?.programs?.length?user.programs:PROGRAMS;}
-function allowedGrades(){return user?.role==='admin'?GRADE_LEVELS:(user?.gradeLevels?.length?user.gradeLevels:GRADE_LEVELS);}
+function programGradesFor(account,program){
+  if(account?.role==='admin')return copyData(GRADE_LEVELS);
+  const programs=account?.programs?.length?account.programs:PROGRAMS;
+  if(!programs.includes(program))return[];
+  const scoped=account?.programGradeLevels||account?.sectionPermissions?.[PROGRAM_GRADE_PERMISSION_KEY];
+  const legacy=account?.gradeLevels?.length?account.gradeLevels:GRADE_LEVELS;
+  const grades=Array.isArray(scoped?.[program])?scoped[program]:legacy;
+  return [...new Set(grades.map(String).filter(grade=>GRADE_LEVELS.includes(grade)))];
+}
+function programGradeMap(account){return Object.fromEntries(PROGRAMS.map(program=>[program,programGradesFor(account,program)]));}
+function allowedGrades(program=db.activeProgram,account=user){return programGradesFor(account,program);}
 function visibleClasses(){
-  const programs=allowedPrograms(),grades=allowedGrades();
-  return Object.values(db.classes||{}).map(normalizeClassScope).filter(c=>c.program===db.activeProgram&&programs.includes(c.program)&&grades.includes(classGrade(c)));
+  const programs=allowedPrograms();
+  return Object.values(db.classes||{}).map(normalizeClassScope).filter(c=>c.program===db.activeProgram&&programs.includes(c.program)&&allowedGrades(c.program).includes(classGrade(c)));
 }
 function visibleStudents(){const ids=new Set(visibleClasses().map(c=>c.id));return Object.values(db.students||{}).filter(s=>ids.has(s.classId));}
 function programLabel(program){return LANG==='ar'?(program==='international'?'الدولي':'الأهلي'):(program==='international'?'International':'National');}
@@ -1429,7 +1448,8 @@ async function load(){
   if(!staffResult.error){
     (staffResult.data||[]).forEach(profile=>{
       const saved=savedTeachersByEmail[profile.email.toLowerCase()];
-      db.teachers[profile.user_id]={id:profile.user_id,email:profile.email,name:profile.full_name,role:profile.role,programs:profile.programs||PROGRAMS,gradeLevels:profile.grade_levels||GRADE_LEVELS,sectionPermissions:profile.section_permissions||{},active:profile.active,registered:true,subject:saved?.subject||''};
+      const account={id:profile.user_id,email:profile.email,name:profile.full_name,role:profile.role,programs:profile.programs||PROGRAMS,gradeLevels:profile.grade_levels||GRADE_LEVELS,sectionPermissions:profile.section_permissions||{},active:profile.active,registered:true,subject:saved?.subject||''};
+      account.programGradeLevels=programGradeMap(account);db.teachers[profile.user_id]=account;
     });
   }
   if(user?.role==='admin'){
@@ -1438,7 +1458,8 @@ async function load(){
       (inviteResult.data||[]).forEach(invite=>{
         if(Object.values(db.teachers).some(existing=>existing.email.toLowerCase()===invite.email.toLowerCase()))return;
         const saved=savedTeachersByEmail[invite.email.toLowerCase()];
-        db.teachers['inv-'+invite.email]={id:'inv-'+invite.email,email:invite.email,name:invite.full_name,role:invite.role,programs:invite.programs||PROGRAMS,gradeLevels:invite.grade_levels||GRADE_LEVELS,sectionPermissions:invite.section_permissions||{},active:invite.active,registered:false,subject:saved?.subject||''};
+        const account={id:'inv-'+invite.email,email:invite.email,name:invite.full_name,role:invite.role,programs:invite.programs||PROGRAMS,gradeLevels:invite.grade_levels||GRADE_LEVELS,sectionPermissions:invite.section_permissions||{},active:invite.active,registered:false,subject:saved?.subject||''};
+        account.programGradeLevels=programGradeMap(account);db.teachers[account.id]=account;
       });
     }
   }
@@ -1497,6 +1518,7 @@ async function connectAuthenticatedUser(sessionResult=null,requireAppChoice=fals
     return false;
   }
   user={id:profile.user_id,email:profile.email,role:profile.role,name:profile.full_name,programs:profile.programs||PROGRAMS,gradeLevels:profile.grade_levels||GRADE_LEVELS,sectionPermissions:profile.section_permissions||{}};
+  user.programGradeLevels=programGradeMap(user);
   document.getElementById('loginPage').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('sbName').textContent=user.name;
@@ -2059,6 +2081,10 @@ function renderClsTable(){
   }).join('')||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--slate-400)">${t('noData')}</td></tr>`;
 }
 
+function userGradeScopeHtml(account){
+  const programs=account.programs||PROGRAMS;
+  return `<div class="user-grade-scope">${programs.map(program=>`<div class="user-grade-scope-row"><strong>${programLabel(program)}</strong><span>${programGradesFor(account,program).map(grade=>`<span class="badge bg-gr">${grade}</span>`).join(' ')||'—'}</span></div>`).join('')}</div>`;
+}
 function renderTchTable(){
   const search=(document.getElementById('userSrch')?.value||'').trim().toLowerCase();
   const role=document.getElementById('userRoleF')?.value||'';
@@ -2067,11 +2093,12 @@ function renderTchTable(){
   const section=document.getElementById('userSectionF')?.value||'';
   const status=document.getElementById('userStatusF')?.value||'';
   const users=Object.values(db.teachers).filter(tc=>{
-    const programs=tc.programs||PROGRAMS,grades=tc.gradeLevels||GRADE_LEVELS;
+    const programs=tc.programs||PROGRAMS;
     if(search&&!`${tc.name} ${tc.email}`.toLowerCase().includes(search))return false;
     if(role&&tc.role!==role)return false;
     if(program&&!programs.includes(program))return false;
-    if(grade&&!grades.includes(grade))return false;
+    if(program&&grade&&!programGradesFor(tc,program).includes(grade))return false;
+    if(!program&&grade&&!programs.some(item=>programGradesFor(tc,item).includes(grade)))return false;
     if(section&&!effectiveUserSections(tc).includes(section))return false;
     if(status==='active'&&(!tc.active||tc.registered===false))return false;
     if(status==='pending'&&tc.registered!==false)return false;
@@ -2083,7 +2110,7 @@ function renderTchTable(){
     <td style="font-size:.8rem;color:var(--slate-500)">${tc.email}</td><td>${tc.subject||'—'}</td>
     <td><span class="badge ${tc.role==='admin'?'bg-r':tc.role==='principal'?'bg-b':tc.role==='supervisor'?'bg-p':'bg-g'}">${t('roles')[tc.role]||tc.role}</span></td>
     <td>${(tc.programs||PROGRAMS).map(p=>`<span class="badge bg-b">${programLabel(p)}</span>`).join(' ')}</td>
-    <td>${(tc.gradeLevels||GRADE_LEVELS).map(g=>`<span class="badge bg-gr">${g}</span>`).join(' ')}</td>
+    <td>${userGradeScopeHtml(tc)}</td>
     <td style="max-width:260px">${effectiveUserSections(tc).map(s=>`<span class="badge bg-gr">${sectionLabel(s)}</span>`).join(' ')}</td>
     <td><span class="badge ${tc.registered===false?'bg-o':tc.active?'bg-g':'bg-gr'}">${tc.registered===false?(LANG==='ar'?'بانتظار التسجيل':'Pending'):tc.active?(LANG==='ar'?'نشط':'Active'):(LANG==='ar'?'معطل':'Inactive')}</span></td>
     <td><button class="btn btn-out btn-xs" onclick="editTch('${tc.id}')">✏️</button> ${user?.role==='admin'&&tc.registered!==false?`<button class="btn btn-out btn-xs" title="${LANG==='ar'?'إعادة تعيين كلمة المرور':'Reset Password'}" onclick="openAdminPassword('${tc.id}')">🔑</button>`:''} <button class="btn btn-r btn-xs" onclick="delTch('${tc.id}')">🗑️</button></td>
@@ -2143,6 +2170,24 @@ function editStu(id){
 function delStu(id){if(!hasPermission('students_delete')||!visibleStudents().some(s=>s.id===id))return;if(!confirm(t('confirmDel')))return;delete db.students[id];save();renderStuTable();renderDashboard();toast(t('deleted'));}
 
 // CRUD CLASSES
+function syncClassResponsibleTeachers(selectedTeacher=''){
+  const program=document.getElementById('eClsProgram').value;
+  const grade=document.getElementById('eClsGrade').value;
+  const teacherSelect=document.getElementById('eClsTch');
+  const teachers=Object.values(db.teachers).filter(account=>(account.programs||PROGRAMS).includes(program)&&programGradesFor(account,program).includes(grade));
+  teacherSelect.innerHTML=`<option value="">—</option>`+teachers.map(account=>`<option value="${account.id}" ${account.id===(selectedTeacher||teacherSelect.value)?'selected':''}>${account.name}</option>`).join('');
+}
+function syncClassScopeOptions(selectedProgram=db.activeProgram,selectedGrade='',selectedTeacher=''){
+  const programSelect=document.getElementById('eClsProgram');
+  const programs=allowedPrograms();
+  const program=programs.includes(selectedProgram)?selectedProgram:(programs[0]||'national');
+  programSelect.innerHTML=programs.map(item=>`<option value="${item}" ${item===program?'selected':''}>${programLabel(item)}</option>`).join('');
+  const gradeSelect=document.getElementById('eClsGrade');
+  const grades=allowedGrades(program);
+  const grade=grades.includes(String(selectedGrade))?String(selectedGrade):(grades[0]||'');
+  gradeSelect.innerHTML=grades.map(item=>`<option value="${item}" ${item===grade?'selected':''}>${item}</option>`).join('');
+  syncClassResponsibleTeachers(selectedTeacher);
+}
 function saveCls(){
   if(!hasPermission('classes'))return;
   const old=document.getElementById('eClsOld').value;
@@ -2150,18 +2195,35 @@ function saveCls(){
   const nameAr=document.getElementById('eClsNameAr').value.trim();
   const nameEn=document.getElementById('eClsNameEn').value.trim();
   const tId=document.getElementById('eClsTch').value;
+  const program=document.getElementById('eClsProgram').value;
+  const grade=document.getElementById('eClsGrade').value;
   if(!id||!nameAr||!nameEn){toast(LANG==='ar'?'أدخل رمز الفصل واسميه بالعربية والإنجليزية':'Enter the class code and both Arabic and English names');return;}
+  if(!allowedPrograms().includes(program)||!allowedGrades(program).includes(grade)){toast(LANG==='ar'?'البرنامج أو الصف خارج صلاحيات المستخدم':'The program or grade is outside the signed-in user permissions');return;}
   if(!old&&db.classes[id]){toast('❌ Code already exists');return;}
-  db.classes[old||id]={id:old||id,name:nameAr,nameAr,nameEn,teacherId:tId,program:document.getElementById('eClsProgram').value||db.activeProgram,gradeLevel:document.getElementById('eClsGrade').value||classGrade({id})};
+  db.classes[old||id]={id:old||id,name:nameAr,nameAr,nameEn,teacherId:tId,program,gradeLevel:grade};
   save();renderClsTable();fillSelects();closeM('mCls');toast(t('saved'));
 }
-function editCls(id){const c=db.classes[id];if(!c)return;normalizeClassScope(c);document.getElementById('eClsOld').value=c.id;document.getElementById('eClsId').value=c.id;document.getElementById('eClsNameAr').value=c.nameAr;document.getElementById('eClsNameEn').value=c.nameEn;document.getElementById('eClsProgram').value=c.program;document.getElementById('eClsGrade').value=classGrade(c);document.getElementById('eClsTch').value=c.teacherId||'';openM('mCls',true);}
+function editCls(id){const c=db.classes[id];if(!c||!visibleClasses().some(item=>item.id===id))return;normalizeClassScope(c);document.getElementById('eClsOld').value=c.id;document.getElementById('eClsId').value=c.id;document.getElementById('eClsNameAr').value=c.nameAr;document.getElementById('eClsNameEn').value=c.nameEn;syncClassScopeOptions(c.program,classGrade(c),c.teacherId||'');openM('mCls',true);}
 function delCls(id){if(!hasPermission('classes')||!visibleClasses().some(c=>c.id===id))return;if(!confirm(t('confirmDel')))return;delete db.classes[id];save();renderClsTable();toast(t('deleted'));}
 
 // CRUD TEACHERS
 function setUserPasswordFields(isNew){
   ['eTchPasswordWrap','eTchPasswordConfirmWrap'].forEach(id=>{document.getElementById(id).style.display=isNew?'':'none';});
   ['eTchPassword','eTchPasswordConfirm'].forEach(id=>{const field=document.getElementById(id);field.value='';field.required=isNew;});
+}
+function syncProgramGradePermissionInputs(){
+  const role=document.getElementById('eTchRole').value;
+  document.querySelectorAll('.tch-program').forEach(programInput=>{
+    if(role==='admin')programInput.checked=true;
+    programInput.disabled=role==='admin';
+    const enabled=programInput.checked;
+    const group=document.querySelector(`[data-program-grade-group="${programInput.value}"]`);
+    if(group)group.classList.toggle('is-disabled',!enabled);
+    document.querySelectorAll(`.tch-program-grade[data-program="${programInput.value}"]`).forEach(gradeInput=>{
+      if(role==='admin')gradeInput.checked=true;
+      gradeInput.disabled=role==='admin'||!enabled;
+    });
+  });
 }
 function syncUserSectionPermissionsFromRole(saved=null){
   const role=document.getElementById('eTchRole').value;
@@ -2170,6 +2232,7 @@ function syncUserSectionPermissionsFromRole(saved=null){
     el.disabled=!allowed||role==='admin';
     el.checked=allowed&&(role==='admin'||!saved||saved[el.value]!==false);
   });
+  syncProgramGradePermissionInputs();
 }
 async function saveTch(){
   if(!hasPermission('teachers'))return;
@@ -2184,10 +2247,14 @@ async function saveTch(){
   if(isNew&&password!==passwordConfirmation){toast(LANG==='ar'?'كلمتا المرور غير متطابقتين':'Passwords do not match');return;}
   const role=document.getElementById('eTchRole').value;
   const programs=role==='admin'?copyData(PROGRAMS):[...document.querySelectorAll('.tch-program:checked')].map(el=>el.value);
-  const gradeLevels=role==='admin'?copyData(GRADE_LEVELS):[...document.querySelectorAll('.tch-grade:checked')].map(el=>el.value);
+  const programGradeLevels=Object.fromEntries(PROGRAMS.map(program=>[program,role==='admin'?copyData(GRADE_LEVELS):[...document.querySelectorAll(`.tch-program-grade[data-program="${program}"]:checked`)].map(el=>el.value)]));
+  const gradeLevels=[...new Set(programs.flatMap(program=>programGradeLevels[program]))];
   const sectionPermissions={};
   document.querySelectorAll('.tch-section').forEach(el=>{sectionPermissions[el.value]=role==='admin'?true:(roleAllows(role,el.value)&&el.checked);});
-  if(!programs.length||!gradeLevels.length){toast(LANG==='ar'?'اختر برنامجاً وصفاً واحداً على الأقل':'Select at least one program and one grade');return;}
+  sectionPermissions[PROGRAM_GRADE_PERMISSION_KEY]=programGradeLevels;
+  if(!programs.length){toast(LANG==='ar'?'اختر برنامجاً واحداً على الأقل':'Select at least one program');return;}
+  const programWithoutGrades=programs.find(program=>!programGradeLevels[program].length);
+  if(programWithoutGrades){toast(LANG==='ar'?`اختر صفاً واحداً على الأقل لبرنامج ${programLabel(programWithoutGrades)}`:`Select at least one grade for the ${programLabel(programWithoutGrades)} program`);return;}
   const button=document.getElementById('saveTchBtn');button.disabled=true;
   try{
     const inviteResult=await window.neonClient.from('staff_invites').upsert({email,full_name:name,role,programs,grade_levels:gradeLevels,section_permissions:sectionPermissions,active:true},{onConflict:'email'});
@@ -2210,15 +2277,15 @@ async function saveTch(){
       }else authAccount=authUserFrom(accountResult);
     }
     const existing=id?db.teachers[id]:null;
-    const data={id:id||(authAccount?.id)||('inv-'+email),name,email,subject:document.getElementById('eTchSubj').value.trim(),role,programs,gradeLevels,sectionPermissions,active:true,registered:isNew?true:(existing?.registered??false)};
+    const data={id:id||(authAccount?.id)||('inv-'+email),name,email,subject:document.getElementById('eTchSubj').value.trim(),role,programs,gradeLevels,programGradeLevels,sectionPermissions,active:true,registered:isNew?true:(existing?.registered??false)};
     if(isNew)delete db.teachers['inv-'+email];
     db.teachers[data.id]=data;save();renderTchTable();fillSelects();closeM('mTch');toast(t('saved'));
     // Update sidebar name if this is current user
-    if(user&&email===user.email){user={...user,name,role,programs,gradeLevels,sectionPermissions};document.getElementById('sbName').textContent=name;applyUserPermissions();}
+    if(user&&email===user.email){user={...user,name,role,programs,gradeLevels,programGradeLevels,sectionPermissions};document.getElementById('sbName').textContent=name;applyUserPermissions();}
   }catch(e){toast(e?.message||(LANG==='ar'?'تعذر حفظ المستخدم':'Could not save user'));}
   finally{button.disabled=false;}
 }
-function editTch(id){const tc=db.teachers[id];if(!tc)return;setUserPasswordFields(false);document.getElementById('eTchId').value=tc.id;document.getElementById('eTchName').value=tc.name;document.getElementById('eTchEmail').value=tc.email;document.getElementById('eTchSubj').value=tc.subject||'';document.getElementById('eTchRole').value=tc.role||'teacher';document.querySelectorAll('.tch-program').forEach(el=>el.checked=(tc.programs||PROGRAMS).includes(el.value));document.querySelectorAll('.tch-grade').forEach(el=>el.checked=(tc.gradeLevels||GRADE_LEVELS).includes(el.value));syncUserSectionPermissionsFromRole(tc.sectionPermissions||{});openM('mTch',true);}
+function editTch(id){const tc=db.teachers[id];if(!tc)return;setUserPasswordFields(false);document.getElementById('eTchId').value=tc.id;document.getElementById('eTchName').value=tc.name;document.getElementById('eTchEmail').value=tc.email;document.getElementById('eTchSubj').value=tc.subject||'';document.getElementById('eTchRole').value=tc.role||'teacher';document.querySelectorAll('.tch-program').forEach(el=>el.checked=(tc.programs||PROGRAMS).includes(el.value));const gradeMap=programGradeMap(tc);document.querySelectorAll('.tch-program-grade').forEach(el=>el.checked=gradeMap[el.dataset.program].includes(el.value));syncUserSectionPermissionsFromRole(tc.sectionPermissions||{});openM('mTch',true);}
 function openAdminPassword(id){
   if(user?.role!=='admin')return;
   const target=db.teachers[id];if(!target||target.registered===false)return;
@@ -2618,7 +2685,7 @@ function buildImportPlan(rows){
     if(!row.program)addImportError(errors,row,LANG==='ar'?'البرنامج يجب أن يكون national أو international':'Program must be national or international');
     else if(!allowedPrograms().includes(row.program))addImportError(errors,row,LANG==='ar'?'البرنامج خارج صلاحيات المستخدم':'Program is outside the signed-in user permissions');
     if(!GRADE_LEVELS.includes(row.grade))addImportError(errors,row,LANG==='ar'?'الصف يجب أن يكون من 4 إلى 12':'Grade must be from 4 to 12');
-    else if(!allowedGrades().includes(row.grade))addImportError(errors,row,LANG==='ar'?'الصف خارج صلاحيات المستخدم':'Grade is outside the signed-in user permissions');
+    else if(!allowedGrades(row.program).includes(row.grade))addImportError(errors,row,LANG==='ar'?'الصف خارج صلاحيات المستخدم لهذا البرنامج':'Grade is outside the signed-in user permissions for this program');
     if(!row.studentName)addImportError(errors,row,LANG==='ar'?'اسم الطالب مطلوب':'Student Name is required');
     if(!row.schoolId)addImportError(errors,row,LANG==='ar'?'الرقم المدرسي مطلوب':'School ID is required');
     if(!emailOk(row.teacherEmail))addImportError(errors,row,LANG==='ar'?'بريد المعلم غير صحيح':'Responsible Teacher Email is invalid');
@@ -2772,8 +2839,8 @@ function openM(id,preserve=false){
   document.getElementById(id).classList.add('open');
   if(preserve)return;
   if(id==='mStu'){document.getElementById('eStuId').value='';['eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach(f=>document.getElementById(f).value='');document.getElementById('eStuCls').value='';}
-  if(id==='mCls'){['eClsOld','eClsId','eClsNameAr','eClsNameEn'].forEach(f=>document.getElementById(f).value='');document.getElementById('eClsTch').value='';document.getElementById('eClsProgram').value=db.activeProgram||'national';document.getElementById('eClsGrade').value=allowedGrades()[0]||'4';}
-  if(id==='mTch'){['eTchId','eTchName','eTchEmail','eTchSubj'].forEach(f=>document.getElementById(f).value='');setUserPasswordFields(true);document.getElementById('eTchRole').value='teacher';document.querySelectorAll('.tch-program,.tch-grade').forEach(el=>el.checked=true);syncUserSectionPermissionsFromRole();}
+  if(id==='mCls'){['eClsOld','eClsId','eClsNameAr','eClsNameEn'].forEach(f=>document.getElementById(f).value='');syncClassScopeOptions(db.activeProgram);}
+  if(id==='mTch'){['eTchId','eTchName','eTchEmail','eTchSubj'].forEach(f=>document.getElementById(f).value='');setUserPasswordFields(true);document.getElementById('eTchRole').value='teacher';document.querySelectorAll('.tch-program,.tch-program-grade').forEach(el=>el.checked=true);syncUserSectionPermissionsFromRole();}
   if(id==='mPassword'){['newPassword','confirmNewPassword'].forEach(f=>document.getElementById(f).value='');document.getElementById('revokeOtherSessions').checked=true;}
   if(id==='mImport'){document.getElementById('impPrev').style.display='none';document.getElementById('impFile').value='';document.getElementById('importRosterBtn').disabled=true;document.getElementById('impYear').textContent=`${LANG==='ar'?'السنة الدراسية':'Scholastic Year'}: ${db.activeAcademicYear}`;impRows=[];impPlan=null;}
 }
