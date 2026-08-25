@@ -6,8 +6,8 @@ var currentBehaviorPage="behavior-dashboard";
 
 var TXT={
   ar:{
-    dashboard:"لوحة السلوك",log:"تسجيل مخالفة",records:"السجل الكامل",positive:"السلوك الإيجابي",
-    positiveReport:"تقرير السلوك الإيجابي",procedures:"التدخلات والإجراءات",reference:"دليل المخالفات",
+    dashboard:"لوحة السلوك",log:"تسجيل مشكلة",records:"السجل الكامل",positive:"السلوك الإيجابي",
+    positiveReport:"تقرير السلوك الإيجابي",procedures:"التدخلات والإجراءات",reference:"دليل المشكلات",
     settings:"إعدادات السلوك",all:"الكل",select:"— اختر —",noData:"لا توجد بيانات مطابقة",
     open:"مفتوحة",follow:"قيد المتابعة",closed:"مغلقة",yes:"نعم",no:"لا",na:"لا ينطبق",
     saved:"✅ تم حفظ سجل السلوك",updated:"✅ تم تحديث سجل السلوك",deleted:"🗑️ تم حذف السجل",
@@ -15,8 +15,8 @@ var TXT={
     attendance:"الحضور",behavior:"السلوك"
   },
   en:{
-    dashboard:"Behavior Dashboard",log:"Record Violation",records:"Complete Register",positive:"Positive Behavior",
-    positiveReport:"Positive Behavior Report",procedures:"Interventions & Procedures",reference:"Violations Guide",
+    dashboard:"Behavior Dashboard",log:"Record Problem",records:"Complete Register",positive:"Positive Behavior",
+    positiveReport:"Positive Behavior Report",procedures:"Interventions & Procedures",reference:"Problems Guide",
     settings:"Behavior Settings",all:"All",select:"— Select —",noData:"No matching data",
     open:"Open",follow:"Under Follow-up",closed:"Closed",yes:"Yes",no:"No",na:"N/A",
     saved:"✅ Behavior record saved",updated:"✅ Behavior record updated",deleted:"🗑️ Record deleted",
@@ -235,14 +235,14 @@ function buildNavigation(){
     "<div class='behavior-app-label'>⭐ <span data-ar='نظام السلوك والمواظبة' data-en='Behavior System'>نظام السلوك والمواظبة</span></div>"+
     "<div class='nav-sec' data-ar='الرئيسية' data-en='Main'>الرئيسية</div>"+
     navItem("behavior-dashboard","🏠","لوحة التحكم","Dashboard","behavior_dashboard")+
-    navItem("behavior-log","⚠️","تسجيل مخالفة","Record Violation","behavior_record")+
+    navItem("behavior-log","⚠️","تسجيل مشكلة","Record Problem","behavior_record")+
     navItem("behavior-positive","⭐","السلوك الإيجابي","Positive Behavior","behavior_record")+
     "<div class='nav-sec' data-ar='السجلات والتقارير' data-en='Records & Reports'>السجلات والتقارير</div>"+
-    navItem("behavior-records","📋","سجل المخالفات","Violations Report","behavior_reports")+
+    navItem("behavior-records","📋","سجل المشكلات","Problems Report","behavior_reports")+
     navItem("behavior-positive-report","📊","تقرير السلوك الإيجابي","Positive Report","behavior_reports")+
     "<div class='nav-sec' data-ar='الأدلة' data-en='Guides'>الأدلة</div>"+
     navItem("behavior-procedures","📌","التدخلات والإجراءات","Interventions","behavior_reference")+
-    navItem("behavior-reference","📖","دليل المخالفات","Violations Guide","behavior_reference")+
+    navItem("behavior-reference","📖","دليل المشكلات","Problems Guide","behavior_reference")+
     "<div class='nav-sec' data-ar='البيانات المشتركة' data-en='Shared Data'>البيانات المشتركة</div>"+
     "<div class='ni behavior-ni' data-behavior-permission='students_edit' onclick=\"openBehaviorSharedPage('students',this)\"><span class='ic'>👥</span><span data-ar='الطلاب' data-en='Students'>الطلاب</span></div>"+
     "<div class='ni behavior-ni' data-behavior-permission='classes' onclick=\"openBehaviorSharedPage('classes',this)\"><span class='ic'>🏫</span><span data-ar='الفصول' data-en='Classes'>الفصول</span></div>"+
@@ -262,7 +262,7 @@ function buildPages(){
   var html="";
   html+="<div class='page behavior-page' id='page-behavior-dashboard'><div id='behDashboard'></div></div>";
   html+="<div class='page behavior-page' id='page-behavior-log'>"+
-    "<div class='behavior-hero'><div><h3 data-ar='تسجيل مخالفة سلوكية' data-en='Record a Behavioral Violation'>تسجيل مخالفة سلوكية</h3><p data-ar='سجل موحد مرتبط بالطالب والفصل والسنة والفصل الدراسي الحالي.' data-en='A unified record linked to the student, class, scholastic year, and current semester.'>سجل موحد مرتبط بالطالب والفصل والسنة والفصل الدراسي الحالي.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' onclick='resetViolationForm()'>↻ <span data-ar='نموذج جديد' data-en='New Form'>نموذج جديد</span></button></div></div>"+
+    "<div class='behavior-hero'><div><h3 data-ar='تسجيل مشكلة سلوكية' data-en='Record a Behavioral Problem'>تسجيل مشكلة سلوكية</h3><p data-ar='سجل موحد مرتبط بالطالب والفصل والسنة والفصل الدراسي الحالي.' data-en='A unified record linked to the student, class, scholastic year, and current semester.'>سجل موحد مرتبط بالطالب والفصل والسنة والفصل الدراسي الحالي.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' onclick='resetViolationForm()'>↻ <span data-ar='نموذج جديد' data-en='New Form'>نموذج جديد</span></button></div></div>"+
     "<input type='hidden' id='behViolationId'>"+
     "<div class='beh-form-section'><div class='beh-form-title'>👤 <span data-ar='1 — الطالب والحالة' data-en='1 — Student and Case'>1 — الطالب والحالة</span></div><div class='beh-form-body'><div class='beh-form-grid'>"+
       field("التاريخ *","Date *","behViolationDate","input",{attrs:"type='date'"})+
@@ -270,9 +270,9 @@ function buildPages(){
       field("الطالب *","Student *","behViolationStudent","select",{})+
       field("حالة المتابعة *","Follow-up Status *","behViolationStatus","select",{})+
     "</div></div></div>"+
-    "<div class='beh-form-section'><div class='beh-form-title'>⚠️ <span data-ar='2 — المخالفة والتصنيف' data-en='2 — Violation and Classification'>2 — المخالفة والتصنيف</span></div><div class='beh-form-body'><div class='beh-form-grid'>"+
-      field("درجة المخالفة *","Violation Level *","behViolationLevel","select",{attrs:"onchange='updateViolationCatalog()'"})+
-      field("نوع المخالفة *","Violation Type *","behViolationType","select",{})+
+    "<div class='beh-form-section'><div class='beh-form-title'>⚠️ <span data-ar='2 — المشكلة والتصنيف' data-en='2 — Problem and Classification'>2 — المشكلة والتصنيف</span></div><div class='beh-form-body'><div class='beh-form-grid'>"+
+      field("درجة المشكلة *","Problem Level *","behViolationLevel","select",{attrs:"onchange='updateViolationCatalog()'"})+
+      field("نوع المشكلة *","Problem Type *","behViolationType","select",{})+
       field("وصف الواقعة","Incident Description","behViolationDescription","textarea",{full:true,attrs:"rows='3'"})+
     "</div><div id='behProcedurePreview' class='beh-procedure-preview' style='margin-top:12px'></div></div></div>"+
     "<div class='beh-form-section'><div class='beh-form-title'>📌 <span data-ar='3 — التدخلات والإجراءات' data-en='3 — Interventions and Actions'>3 — التدخلات والإجراءات</span></div><div class='beh-form-body'><div class='beh-grid-2'><div><div id='behProcedureChecks' class='beh-check-list'></div></div><div class='beh-form-grid'>"+
@@ -288,11 +288,11 @@ function buildPages(){
       field("المسؤول عن المتابعة","Responsible Person","behResponsible","select",{})+
       field("ملاحظات ختامية","Final Notes","behViolationNotes","textarea",{full:true,attrs:"rows='3'"})+
     "</div></div></div>"+
-    "<div class='beh-form-actions'><button class='beh-btn beh-btn-outline' onclick='resetViolationForm()'><span data-ar='إلغاء / مسح' data-en='Cancel / Clear'>إلغاء / مسح</span></button><button id='behSaveViolation' class='beh-btn beh-btn-primary' onclick='saveViolationRecord()'>💾 <span data-ar='حفظ المخالفة' data-en='Save Violation'>حفظ المخالفة</span></button></div>"+
+    "<div class='beh-form-actions'><button class='beh-btn beh-btn-outline' onclick='resetViolationForm()'><span data-ar='إلغاء / مسح' data-en='Cancel / Clear'>إلغاء / مسح</span></button><button id='behSaveViolation' class='beh-btn beh-btn-primary' onclick='saveViolationRecord()'>💾 <span data-ar='حفظ المشكلة' data-en='Save Problem'>حفظ المشكلة</span></button></div>"+
   "</div>";
 
   html+="<div class='page behavior-page' id='page-behavior-records'>"+
-    "<div class='behavior-hero'><div><h3 data-ar='السجل الكامل للمخالفات' data-en='Complete Violations Register'>السجل الكامل للمخالفات</h3><p data-ar='البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.' data-en='Search, filter, edit, print, and export within the signed-in user scope.'>البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' data-behavior-permission='behavior_reports' onclick=\"exportBehaviorExcel('violations')\">📗 <span data-ar='Excel' data-en='Excel'>Excel</span></button><button class='beh-btn beh-btn-gold' data-behavior-permission='behavior_reports' onclick=\"printBehaviorReport('violations')\">🖨️ <span data-ar='طباعة' data-en='Print'>طباعة</span></button></div></div>"+
+    "<div class='behavior-hero'><div><h3 data-ar='السجل الكامل للمشكلات' data-en='Complete Problems Register'>السجل الكامل للمشكلات</h3><p data-ar='البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.' data-en='Search, filter, edit, print, and export within the signed-in user scope.'>البحث والتصفية والتعديل والطباعة والتصدير ضمن نطاق صلاحيات المستخدم.</p></div><div class='behavior-hero-actions'><button class='beh-btn beh-btn-light' data-behavior-permission='behavior_reports' onclick=\"exportBehaviorExcel('violations')\">📗 <span data-ar='Excel' data-en='Excel'>Excel</span></button><button class='beh-btn beh-btn-gold' data-behavior-permission='behavior_reports' onclick=\"printBehaviorReport('violations')\">🖨️ <span data-ar='طباعة' data-en='Print'>طباعة</span></button></div></div>"+
     "<div class='beh-filters'>"+
       "<div class='beh-filter'><label data-ar='السنة الدراسية' data-en='Scholastic Year'>السنة الدراسية</label><select id='behRecordYear' onchange=\"changeBehaviorReportPeriod('violations')\"></select></div>"+
       "<div class='beh-filter'><label data-ar='الفصل الدراسي' data-en='Semester'>الفصل الدراسي</label><select id='behRecordSemester' onchange=\"changeBehaviorReportPeriod('violations')\"></select></div>"+
@@ -302,7 +302,7 @@ function buildPages(){
       "<div class='beh-filter'><label data-ar='الحالة' data-en='Status'>الحالة</label><select id='behRecordStatus' onchange='renderBehaviorRecords()'></select></div>"+
       "<div class='beh-filter'><label data-ar='من تاريخ' data-en='From Date'>من تاريخ</label><input type='date' id='behRecordFrom' onchange='renderBehaviorRecords()'></div>"+
     "</div><div class='beh-filter' style='max-width:220px;margin-bottom:12px'><label data-ar='إلى تاريخ' data-en='To Date'>إلى تاريخ</label><input type='date' id='behRecordTo' onchange='renderBehaviorRecords()'></div>"+
-    "<div id='behRecordCount' class='beh-count'></div><div class='beh-table-wrap'><table class='beh-table'><thead><tr><th data-ar='رقم الحالة' data-en='Case No.'>رقم الحالة</th><th data-ar='التاريخ' data-en='Date'>التاريخ</th><th data-ar='الطالب' data-en='Student'>الطالب</th><th data-ar='الفصل' data-en='Class'>الفصل</th><th data-ar='الدرجة' data-en='Level'>الدرجة</th><th data-ar='المخالفة' data-en='Violation'>المخالفة</th><th data-ar='ولي الأمر' data-en='Parent'>ولي الأمر</th><th data-ar='الحالة' data-en='Status'>الحالة</th><th data-ar='الإجراءات' data-en='Actions'>الإجراءات</th></tr></thead><tbody id='behRecordsBody'></tbody></table></div>"+
+    "<div id='behRecordCount' class='beh-count'></div><div class='beh-table-wrap'><table class='beh-table'><thead><tr><th data-ar='رقم الحالة' data-en='Case No.'>رقم الحالة</th><th data-ar='التاريخ' data-en='Date'>التاريخ</th><th data-ar='الطالب' data-en='Student'>الطالب</th><th data-ar='الفصل' data-en='Class'>الفصل</th><th data-ar='الدرجة' data-en='Level'>الدرجة</th><th data-ar='المشكلة' data-en='Problem'>المشكلة</th><th data-ar='ولي الأمر' data-en='Parent'>ولي الأمر</th><th data-ar='الحالة' data-en='Status'>الحالة</th><th data-ar='الإجراءات' data-en='Actions'>الإجراءات</th></tr></thead><tbody id='behRecordsBody'></tbody></table></div>"+
   "</div>";
 
   html+="<div class='page behavior-page' id='page-behavior-positive'>"+
@@ -333,7 +333,7 @@ function buildPages(){
   "</div>";
 
   html+="<div class='page behavior-page' id='page-behavior-procedures'><div class='behavior-hero'><div><h3 data-ar='التدخلات والإجراءات التنظيمية' data-en='Regulatory Interventions and Procedures'>التدخلات والإجراءات التنظيمية</h3><p data-ar='ملخص التدخلات المرتبطة بكل درجة من دليل السلوك.' data-en='Summary of interventions linked to each level in the behavior guide.'>ملخص التدخلات المرتبطة بكل درجة من دليل السلوك.</p></div></div><div id='behProceduresGrid' class='beh-reference-grid'></div></div>";
-  html+="<div class='page behavior-page' id='page-behavior-reference'><div class='behavior-hero'><div><h3 data-ar='دليل المخالفات السلوكية' data-en='Behavioral Violations Guide'>دليل المخالفات السلوكية</h3><p data-ar='جميع درجات المخالفات وأنواعها والحسم المرتبط بها كما في الملف الأصلي.' data-en='All violation levels, types, and deductions retained from the original file.'>جميع درجات المخالفات وأنواعها والحسم المرتبط بها كما في الملف الأصلي.</p></div></div><div id='behReferenceGrid' class='beh-reference-grid'></div></div>";
+  html+="<div class='page behavior-page' id='page-behavior-reference'><div class='behavior-hero'><div><h3 data-ar='دليل المشكلات السلوكية' data-en='Behavioral Problems Guide'>دليل المشكلات السلوكية</h3><p data-ar='جميع درجات المشكلات وأنواعها والحسم المرتبط بها كما في الملف الأصلي.' data-en='All problem levels, types, and deductions retained from the original file.'>جميع درجات المشكلات وأنواعها والحسم المرتبط بها كما في الملف الأصلي.</p></div></div><div id='behReferenceGrid' class='beh-reference-grid'></div></div>";
   html+="<div class='page behavior-page' id='page-behavior-settings'><div class='behavior-hero'><div><h3 data-ar='إعدادات السلوك' data-en='Behavior Settings'>إعدادات السلوك</h3><p data-ar='المسؤولون والإجراءات المخصصة وسجل النشاط.' data-en='Responsible people, custom interventions, and activity log.'>المسؤولون والإجراءات المخصصة وسجل النشاط.</p></div></div>"+
     "<div class='beh-grid-2'><div class='beh-panel'><div class='beh-panel-head'><h3 data-ar='المسؤولون عن المتابعة' data-en='Responsible People'>المسؤولون عن المتابعة</h3></div><div class='beh-panel-body'><div class='beh-form-grid'><div class='beh-field'><label data-ar='الاسم بالعربية' data-en='Arabic Name'>الاسم بالعربية</label><input id='behResponsibleAr'></div><div class='beh-field'><label data-ar='الاسم بالإنجليزية' data-en='English Name'>الاسم بالإنجليزية</label><input id='behResponsibleEn'></div></div><button class='beh-btn beh-btn-primary' style='margin-top:10px' data-behavior-permission='settings' onclick='addBehaviorResponsible()'>➕ <span data-ar='إضافة مسؤول' data-en='Add Person'>إضافة مسؤول</span></button><div id='behResponsibleList' style='margin-top:12px'></div></div></div>"+
     "<div class='beh-panel'><div class='beh-panel-head'><h3 data-ar='إجراءات مخصصة' data-en='Custom Interventions'>إجراءات مخصصة</h3></div><div class='beh-panel-body'><div class='beh-form-grid'><div class='beh-field'><label data-ar='الإجراء بالعربية' data-en='Arabic Intervention'>الإجراء بالعربية</label><input id='behProcedureAr'></div><div class='beh-field'><label data-ar='الإجراء بالإنجليزية' data-en='English Intervention'>الإجراء بالإنجليزية</label><input id='behProcedureEn'></div></div><button class='beh-btn beh-btn-primary' style='margin-top:10px' data-behavior-permission='settings' onclick='addBehaviorProcedure()'>➕ <span data-ar='إضافة إجراء' data-en='Add Intervention'>إضافة إجراء</span></button><div id='behCustomProcedureList' style='margin-top:12px'></div></div></div></div>"+
@@ -581,7 +581,7 @@ window.resetViolationForm=function(){
   ["behViolationClass","behViolationStudent","behViolationLevel","behViolationType","behContactMethod","behResponsible"].forEach(function(x){var el=document.getElementById(x);if(el)el.value="";});
   ["behViolationDescription","behManualProcedure","behProcedureNotes","behViolationNotes","behContactDate"].forEach(function(x){var el=document.getElementById(x);if(el)el.value="";});
   document.getElementById("behViolationStatus").value="open";document.getElementById("behDocumented").value="yes";document.getElementById("behStudentSigned").value="yes";document.getElementById("behParentNotified").value="no";
-  updateViolationCatalog();var button=document.getElementById("behSaveViolation");if(button)button.innerHTML="💾 <span data-ar='حفظ المخالفة' data-en='Save Violation'>"+tr("حفظ المخالفة","Save Violation")+"</span>";
+  updateViolationCatalog();var button=document.getElementById("behSaveViolation");if(button)button.innerHTML="💾 <span data-ar='حفظ المشكلة' data-en='Save Problem'>"+tr("حفظ المشكلة","Save Problem")+"</span>";
 };
 
 window.saveViolationRecord=function(){
@@ -725,11 +725,11 @@ window.renderBehaviorDashboard=function(){
   var recent=v.slice().sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""));}).slice(0,6);
   var maxLevel=Math.max(1,Object.keys(VIOLATIONS).reduce(function(m,key){return Math.max(m,v.filter(function(r){return r.vlevel===key;}).length);},0));
   target.innerHTML=
-    "<div class='behavior-hero'><div><h3>"+esc(tx("dashboard"))+"</h3><p>"+esc(tr("متابعة المخالفات والسلوك الإيجابي ضمن البرنامج والسنة والفصل الدراسي المفتوح.","Monitor violations and positive behavior within the selected program, year, and semester."))+"</p></div><div class='behavior-hero-actions'>"+(hasPermission("behavior_record")?"<button class='beh-btn beh-btn-gold' onclick=\"goBehaviorPage('behavior-log',document.querySelector('#behaviorNav [onclick*=behavior-log]'))\">➕ "+esc(tx("log"))+"</button><button class='beh-btn beh-btn-light' onclick=\"goBehaviorPage('behavior-positive',document.querySelector('#behaviorNav [onclick*=behavior-positive]'))\">⭐ "+esc(tx("positive"))+"</button>":"")+"</div></div>"+
+    "<div class='behavior-hero'><div><h3>"+esc(tx("dashboard"))+"</h3><p>"+esc(tr("متابعة المشكلات والسلوك الإيجابي ضمن البرنامج والسنة والفصل الدراسي المفتوح.","Monitor problems and positive behavior within the selected program, year, and semester."))+"</p></div><div class='behavior-hero-actions'>"+(hasPermission("behavior_record")?"<button class='beh-btn beh-btn-gold' onclick=\"goBehaviorPage('behavior-log',document.querySelector('#behaviorNav [onclick*=behavior-log]'))\">➕ "+esc(tx("log"))+"</button><button class='beh-btn beh-btn-light' onclick=\"goBehaviorPage('behavior-positive',document.querySelector('#behaviorNav [onclick*=behavior-positive]'))\">⭐ "+esc(tx("positive"))+"</button>":"")+"</div></div>"+
     "<div class='beh-kpis'>"+
-      kpi("⚠️",v.length,tr("إجمالي المخالفات","Total Violations"),"red")+kpi("👤",unique,tr("طلاب لديهم مخالفات","Students with Violations"),"")+kpi("🔴",open,tr("حالات مفتوحة","Open Cases"),"red")+kpi("🟡",follow,tr("قيد المتابعة","Under Follow-up"),"orange")+
+      kpi("⚠️",v.length,tr("إجمالي المشكلات","Total Problems"),"red")+kpi("👤",unique,tr("طلاب لديهم مشكلات","Students with Problems"),"")+kpi("🔴",open,tr("حالات مفتوحة","Open Cases"),"red")+kpi("🟡",follow,tr("قيد المتابعة","Under Follow-up"),"orange")+
       kpi("🟢",closed,tr("حالات مغلقة","Closed Cases"),"green")+kpi("⭐",p.length,tr("سلوك إيجابي","Positive Records"),"green")+kpi("🏆",points,tr("نقاط التعزيز","Reinforcement Points"),"gold")+kpi("📱",v.filter(function(r){return r.parentNotified==="yes";}).length,tr("إشعار ولي الأمر","Parent Notified"),"")+
-    "</div><div class='beh-grid-2'><div class='beh-panel'><div class='beh-panel-head'><h3>"+esc(tr("توزيع المخالفات حسب الدرجة","Violations by Level"))+"</h3></div><div class='beh-panel-body'><div class='beh-level-bars'>"+
+    "</div><div class='beh-grid-2'><div class='beh-panel'><div class='beh-panel-head'><h3>"+esc(tr("توزيع المشكلات حسب الدرجة","Problems by Level"))+"</h3></div><div class='beh-panel-body'><div class='beh-level-bars'>"+
       Object.keys(VIOLATIONS).map(function(key){var count=v.filter(function(r){return r.vlevel===key;}).length;return "<div class='beh-level-row'><span>"+esc(key+" · "+levelLabel(key))+"</span><div class='beh-level-track'><div class='beh-level-fill' style='width:"+Math.round(count/maxLevel*100)+"%'></div></div><strong>"+count+"</strong></div>";}).join("")+
     "</div></div></div><div class='beh-panel'><div class='beh-panel-head'><h3>"+esc(tr("أحدث الحالات","Recent Cases"))+"</h3><button class='beh-btn beh-btn-outline beh-btn-sm' onclick=\"goBehaviorPage('behavior-records',document.querySelector('#behaviorNav [onclick*=behavior-records]'))\">"+esc(tr("عرض الكل","View All"))+"</button></div><div class='beh-panel-body'><div class='beh-recent'>"+
       (recent.length?recent.map(function(r){return "<div class='beh-recent-item'><span class='beh-badge beh-level-"+esc(r.vlevel)+"'>"+esc(r.vlevel)+"</span><div><strong>"+esc(studentDisplay(r.studentId,r.studentName))+"</strong><small>"+esc(violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype))+"</small></div><small>"+esc(displayDate(r.date))+"</small></div>";}).join(""):"<div class='beh-empty'>"+esc(tx("noData"))+"</div>")+
@@ -741,14 +741,14 @@ function renderBehaviorReferences(proceduresOnly){
   var target=document.getElementById(proceduresOnly?"behProceduresGrid":"behReferenceGrid");if(!target)return;
   target.innerHTML=Object.keys(VIOLATIONS).map(function(key){var group=VIOLATIONS[key],items=L()==="ar"?group.itemsAr:group.itemsEn,procs=L()==="ar"?group.procsAr:group.procsEn;
     return "<article class='beh-reference'><div class='beh-reference-head'><h4>"+esc(key+" — "+levelLabel(key))+"</h4><span class='beh-badge' style='background:rgba(255,255,255,.16);color:white'>"+group.deduction+" "+esc(tr("درجة حسم","points deducted"))+"</span></div><div class='beh-reference-body'>"+
-      (proceduresOnly?"":"<h4 style='margin-bottom:8px'>"+esc(tr("أنواع المخالفات","Violation Types"))+"</h4><ol>"+items.map(function(x){return"<li>"+esc(x)+"</li>";}).join("")+"</ol>")+
+      (proceduresOnly?"":"<h4 style='margin-bottom:8px'>"+esc(tr("أنواع المشكلات","Problem Types"))+"</h4><ol>"+items.map(function(x){return"<li>"+esc(x)+"</li>";}).join("")+"</ol>")+
       "<div class='beh-reference-procs'><h4 style='margin-bottom:8px'>"+esc(tr("التدخلات المعتمدة","Approved Interventions"))+"</h4><ol>"+procs.map(function(x){return"<li>"+esc(x)+"</li>";}).join("")+"</ol></div></div></article>";
   }).join("");
 }
 
 function actionLabel(action){
   var map={
-    "create-violation":["إضافة مخالفة","Created violation"],"update-violation":["تعديل مخالفة","Updated violation"],"delete-violation":["حذف مخالفة","Deleted violation"],
+    "create-violation":["إضافة مشكلة","Created problem"],"update-violation":["تعديل مشكلة","Updated problem"],"delete-violation":["حذف مشكلة","Deleted problem"],
     "create-positive":["إضافة سلوك إيجابي","Created positive behavior"],"update-positive":["تعديل سلوك إيجابي","Updated positive behavior"],"delete-positive":["حذف سلوك إيجابي","Deleted positive behavior"],
     "settings":["تحديث إعدادات السلوك","Updated behavior settings"]
   };var x=map[action]||[action,action];return L()==="ar"?x[0]:x[1];
@@ -786,7 +786,7 @@ function behaviorReportRows(kind){
     var p=filteredPositiveRecords();context.push([tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الرقم المدرسي","School ID"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points"),tr("التعزيز","Reward"),tr("ولي الأمر","Parent"),tr("المسؤول","Responsible"),tr("الوصف","Description"),tr("التوصية","Recommendation")]);
     return context.concat(p.map(function(r){return[r.id,r.date,behaviorReportStudentName(r),behaviorReportStudent(r).schoolId||"",behaviorReportClassName(r),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.points,tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType),yesNo(r.parentNotified),responsibleLabel(r.responsible),r.desc||"",r.recommendation||""];}));
   }
-  var v=filteredViolationRecords();context.push([tr("رقم الحالة","Case No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الرقم المدرسي","School ID"),tr("الفصل","Class"),tr("الدرجة","Level"),tr("المخالفة","Violation"),tr("الحسم","Deduction"),tr("الإجراءات","Interventions"),tr("التوثيق","Documented"),tr("ولي الأمر","Parent"),tr("الحالة","Status"),tr("المسؤول","Responsible"),tr("الملاحظات","Notes")]);
+  var v=filteredViolationRecords();context.push([tr("رقم الحالة","Case No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الرقم المدرسي","School ID"),tr("الفصل","Class"),tr("الدرجة","Level"),tr("المشكلة","Problem"),tr("الحسم","Deduction"),tr("الإجراءات","Interventions"),tr("التوثيق","Documented"),tr("ولي الأمر","Parent"),tr("الحالة","Status"),tr("المسؤول","Responsible"),tr("الملاحظات","Notes")]);
   return context.concat(v.map(function(r){return[r.id,r.date,behaviorReportStudentName(r),behaviorReportStudent(r).schoolId||"",behaviorReportClassName(r),r.vlevel+" · "+levelLabel(r.vlevel),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),r.deduction,(r.procedureKeys||r.procedures||[]).map(function(x){return procedureLabel(r.vlevel,x);}).concat(r.manualProcedure?[r.manualProcedure]:[]).join(" | "),yesNo(r.documented),yesNo(r.parentNotified),statusLabel(r.status),responsibleLabel(r.responsible),r.notes||""];}));
 }
 window.exportBehaviorExcel=async function(kind){
@@ -794,14 +794,14 @@ window.exportBehaviorExcel=async function(kind){
   try{
     var XLSXLib=await ensureXlsxLibrary(),rows=behaviorReportRows(kind),sheet=XLSXLib.utils.aoa_to_sheet(rows),book=XLSXLib.utils.book_new();
     sheet["!cols"]=Array.from({length:Math.max.apply(null,rows.map(function(r){return r.length;}))},function(_,i){return{wch:Math.min(45,Math.max(12,rows.reduce(function(m,r){return Math.max(m,String(r[i]||"").length);},0)+2))};});
-    XLSXLib.utils.book_append_sheet(book,sheet,kind==="positive"?tr("السلوك الإيجابي","Positive Behavior"):tr("المخالفات","Violations"));
-    var period=behaviorReportPeriod(kind);XLSXLib.writeFile(book,(kind==="positive"?"positive-behavior":"behavior-violations")+"-"+period.academicYear+"-"+period.semester+".xlsx");
+    XLSXLib.utils.book_append_sheet(book,sheet,kind==="positive"?tr("السلوك الإيجابي","Positive Behavior"):tr("المشكلات","Problems"));
+    var period=behaviorReportPeriod(kind);XLSXLib.writeFile(book,(kind==="positive"?"positive-behavior":"behavior-problems")+"-"+period.academicYear+"-"+period.semester+".xlsx");
   }catch(error){toast(error&&error.message||tr("تعذر إنشاء ملف Excel","Could not create the Excel file"));}
 };
 
 function printTable(kind){
   var positive=kind==="positive",records=positive?filteredPositiveRecords():filteredViolationRecords();
-  var heads=positive?[tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points"),tr("التعزيز","Reward")]:[tr("رقم الحالة","Case No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("الدرجة","Level"),tr("المخالفة","Violation"),tr("ولي الأمر","Parent"),tr("الحالة","Status")];
+  var heads=positive?[tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points"),tr("التعزيز","Reward")]:[tr("رقم الحالة","Case No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("الدرجة","Level"),tr("المشكلة","Problem"),tr("ولي الأمر","Parent"),tr("الحالة","Status")];
   var body=records.map(function(r){var cells=positive?[r.id,displayDate(r.date),behaviorReportStudentName(r),behaviorReportClassName(r),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),r.points,tupleLabel(REWARD_TYPES,r.rewardTypeKey||r.rewardType)]:[r.id,displayDate(r.date),behaviorReportStudentName(r),behaviorReportClassName(r),r.vlevel+" · "+levelLabel(r.vlevel),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),yesNo(r.parentNotified),statusLabel(r.status)];return"<tr>"+cells.map(function(x){return"<td>"+esc(x)+"</td>";}).join("")+"</tr>";}).join("");
   return "<table><thead><tr>"+heads.map(function(h){return"<th>"+esc(h)+"</th>";}).join("")+"</tr></thead><tbody>"+(body||"<tr><td colspan='"+heads.length+"'>"+esc(tx("noData"))+"</td></tr>")+"</tbody></table>";
 }

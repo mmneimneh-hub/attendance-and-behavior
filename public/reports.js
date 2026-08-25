@@ -20,7 +20,7 @@ function reportSemesterLabel(period=selectedReportAcademicPeriod()){
 }
 
 function mergeReportAttendance(period){
-  const merged={};const priority={present:1,early:2,absent:3};
+  const merged={};const priority={present:1,tardy:2,early:3,absent:4};
   const year=db.academicYears?.[period.academicYear];
   period.semesters.forEach(semester=>{
     const attendance=year?.semesters?.[semester]?.attendance||{};
@@ -101,12 +101,12 @@ function reportFiltersAreValid(config){
 }
 
 function reportRate(stats){
-  const total=stats.present+stats.absent+stats.early;
-  return total?Math.round(stats.present/total*100):100;
+  const total=stats.present+stats.absent+stats.tardy+stats.early;
+  return total?Math.round((stats.present+stats.tardy)/total*100):100;
 }
 
 function reportRating(stats){
-  if(stats.absent===0&&stats.early===0)return t('regular');
+  if(stats.absent===0&&stats.tardy===0&&stats.early===0)return t('regular');
   return stats.absent<=2?t('warning'):t('critical');
 }
 
@@ -131,7 +131,7 @@ function reportContextRows(extra=[]){
 }
 
 function reportStudentHeader(includeRating=false){
-  const row=[LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',t('present'),t('absent'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate'];
+  const row=[LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',t('present'),t('absent'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate'];
   if(includeRating)row.push(LANG==='ar'?'التقييم':'Rating');
   return row;
 }
@@ -144,7 +144,7 @@ function appendStudentStats(rows,classes,from,to,month,year,includeRating=false)
     rows.push([className(cls)]);rows.push(reportStudentHeader(includeRating));
     classStudents.forEach(student=>{
       const stats=getStuStats(student.id,from||null,to||null,month||null,year||null);
-      const row=[student.name,student.schoolId||'',stats.present,stats.absent,stats.early,`${reportRate(stats)}%`];
+      const row=[student.name,student.schoolId||'',stats.present,stats.absent,stats.tardy,stats.early,`${reportRate(stats)}%`];
       if(includeRating)row.push(reportRating(stats));
       rows.push(row);
     });
@@ -175,8 +175,8 @@ function studentReportRows(){
     [LANG==='ar'?'ولي الأمر':'Guardian',student.parent||''],
     [LANG==='ar'?'هاتف ولي الأمر':'Guardian Phone',student.parentPhone||''],
     [LANG==='ar'?'بريد ولي الأمر':'Guardian Email',student.parentEmail||''],[],
-    [t('present'),t('absent'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate',LANG==='ar'?'التقييم':'Rating'],
-    [stats.present,stats.absent,stats.early,`${reportRate(stats)}%`,reportRating(stats)],[],
+    [t('present'),t('absent'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate',LANG==='ar'?'التقييم':'Rating'],
+    [stats.present,stats.absent,stats.tardy,stats.early,`${reportRate(stats)}%`,reportRating(stats)],[],
     [LANG==='ar'?'تواريخ الغياب':'Absence Dates']
   );
   if(stats.absentDates.length)stats.absentDates.forEach(date=>rows.push([date]));else rows.push([t('noAbsent')]);
@@ -186,13 +186,13 @@ function studentReportRows(){
 function dailyReportRows(){
   const date=document.getElementById('rDayD').value;
   const rows=reportContextRows([[LANG==='ar'?'التاريخ':'Date',date]]);
-  rows.push([LANG==='ar'?'الفصل':'Class',LANG==='ar'?'الطلاب':'Students',t('present'),t('absent'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate']);
+  rows.push([LANG==='ar'?'الفصل':'Class',LANG==='ar'?'الطلاب':'Students',t('present'),t('absent'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate']);
   const students=visibleStudents();
   visibleClasses().forEach(cls=>{
-    let present=0,absent=0,early=0;const daily=db.attendance[cls.id]?.[date];
-    if(daily)Object.values(daily).forEach(record=>{if(record.status==='absent')absent++;else if(record.status==='early')early++;else present++;});
-    const total=present+absent+early;
-    rows.push([className(cls),students.filter(student=>student.classId===cls.id).length,present,absent,early,`${total?Math.round(present/total*100):100}%`]);
+    let present=0,absent=0,tardy=0,early=0;const daily=db.attendance[cls.id]?.[date];
+    if(daily)Object.values(daily).forEach(record=>{if(record.status==='absent')absent++;else if(record.status==='tardy')tardy++;else if(record.status==='early')early++;else present++;});
+    const total=present+absent+tardy+early;
+    rows.push([className(cls),students.filter(student=>student.classId===cls.id).length,present,absent,tardy,early,`${total?Math.round((present+tardy)/total*100):100}%`]);
   });
   return rows;
 }
@@ -210,12 +210,12 @@ function rangeReportRows(){
 function topAbsentReportRows(){
   const month=document.getElementById('rTopMon').value;
   const rows=reportContextRows([[LANG==='ar'?'الفترة':'Period',reportMonthLabel(month)]]);
-  rows.push(['#',LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',LANG==='ar'?'الفصل':'Class',t('absent'),t('earlyLeave'),LANG==='ar'?'التقييم':'Rating']);
+  rows.push(['#',LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',LANG==='ar'?'الفصل':'Class',t('absent'),t('tardy'),t('earlyLeave'),LANG==='ar'?'التقييم':'Rating']);
   visibleStudents()
     .map(student=>({student,stats:getStuStats(student.id,null,null,month||null,null),cls:db.classes[student.classId]}))
-    .filter(item=>item.stats.absent>0||item.stats.early>0)
-    .sort((a,b)=>b.stats.absent-a.stats.absent)
-    .forEach((item,index)=>rows.push([index+1,item.student.name,item.student.schoolId||'',item.cls?className(item.cls):item.student.classId,item.stats.absent,item.stats.early,reportRating(item.stats)]));
+    .filter(item=>item.stats.absent>0||item.stats.tardy>0||item.stats.early>0)
+    .sort((a,b)=>b.stats.absent-a.stats.absent||b.stats.tardy-a.stats.tardy||b.stats.early-a.stats.early)
+    .forEach((item,index)=>rows.push([index+1,item.student.name,item.student.schoolId||'',item.cls?className(item.cls):item.student.classId,item.stats.absent,item.stats.tardy,item.stats.early,reportRating(item.stats)]));
   return rows;
 }
 
@@ -269,6 +269,7 @@ function buildPrintDocument(report,content){
   const generated=new Date().toLocaleString(rtl?'ar-SA':'en-GB');
   return`<!doctype html><html lang="${rtl?'ar':'en'}" dir="${rtl?'rtl':'ltr'}"><head><meta charset="utf-8"><title>${escapeReportHtml(report.title)}</title><style>
     *{box-sizing:border-box}html,body{margin:0;background:#fff;color:#172033;font-family:Tahoma,Arial,sans-serif}body{padding:0;font-size:9pt}.official-header{width:100%;margin:0 0 4mm;padding:0 0 3mm;border-bottom:.3mm solid #d7dde8}.official-header img{display:block;width:100%;height:auto;max-height:25mm;object-fit:contain}.report-title{font-size:16pt;font-weight:800;color:#173b6c;text-align:center;margin:0 0 3mm}.meta{display:flex;flex-wrap:wrap;gap:2mm 6mm;margin:0 0 4mm;padding:2.5mm 3mm;background:#f4f7fb;border:.25mm solid #dbe3ee;border-radius:2mm;color:#46556d}.meta b{color:#173b6c}main{width:100%;overflow:visible}table{width:100%!important;max-width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;margin:2mm 0 4mm!important;page-break-inside:auto!important}thead{display:table-header-group!important}tfoot{display:table-footer-group!important}tr{page-break-inside:avoid!important;break-inside:avoid!important}th,td{max-width:0;padding:1.5mm 1.8mm!important;border:.25mm solid #cfd8e6!important;text-align:${rtl?'right':'left'}!important;vertical-align:middle!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important;font-size:8.3pt!important}th{background:#173b6c!important;color:#fff!important;font-weight:700!important}.badge{display:inline-block;padding:.5mm 1.5mm;border-radius:9mm;border:.2mm solid #ccd6e3;background:#f4f7fb}.bg-g{background:#dcfce7!important}.bg-r{background:#fee2e2!important}.bg-o{background:#ffedd5!important}.bg-b{background:#dbeafe!important}.bg-gr{background:#f1f5f9!important}.sg{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:2mm!important;margin:2mm 0 4mm!important}.sc{min-width:0;border:.25mm solid #dbe3ee!important;border-radius:2mm!important;padding:2mm!important;background:#f8fafc!important;display:flex!important;gap:2mm!important;align-items:center!important;break-inside:avoid!important}.sc-ico{display:none!important}.sc-num{font-size:13pt!important;font-weight:800!important}.sc-lbl{font-size:7.5pt!important}.pb{height:1.3mm!important;background:#e2e8f0!important;border-radius:2mm!important;overflow:hidden!important}.pf{height:100%!important;background:#16a34a!important}.pf.mi{background:#f59e0b!important}.pf.lo{background:#dc2626!important}@page{size:A4 landscape;margin:8mm}@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-shadow:none!important}.official-header{break-inside:avoid;page-break-inside:avoid}.report-title,.meta{break-after:avoid;page-break-after:avoid}}
+    .sg{grid-template-columns:repeat(6,minmax(0,1fr))!important}
   </style></head><body><header class="official-header"><img src="${escapeReportHtml(headerUrl)}" alt="Najd National Schools official header"></header><h1 class="report-title">${escapeReportHtml(report.title)}</h1><div class="meta"><span><b>${rtl?'السنة الدراسية':'Academic Year'}:</b> ${escapeReportHtml(report.period.academicYear)}</span><span><b>${rtl?'الفصل الدراسي':'Semester'}:</b> ${escapeReportHtml(semester)}</span><span><b>${rtl?'البرنامج':'Program'}:</b> ${escapeReportHtml(programLabel(db.activeProgram))}</span><span><b>${rtl?'تاريخ الطباعة':'Printed'}:</b> ${escapeReportHtml(generated)}</span></div><main>${content}</main></body></html>`;
 }
 

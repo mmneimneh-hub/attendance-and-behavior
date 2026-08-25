@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   class_id uuid NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
   student_id uuid NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   attendance_date date NOT NULL,
-  status text NOT NULL CHECK (status IN ('present', 'absent', 'early')),
+  status text NOT NULL CHECK (status IN ('present', 'absent', 'tardy', 'early')),
   note text,
   recorded_by text REFERENCES staff_profiles(user_id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
