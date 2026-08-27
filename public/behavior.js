@@ -704,8 +704,8 @@ function filteredPositiveRecords(){
 window.renderPositiveReport=function(){
   var body=document.getElementById("behPositiveBody");if(!body)return;var rows=filteredPositiveRecords(),points=rows.reduce(function(sum,r){return sum+(Number(r.points)||0);},0),students=new Set(rows.map(function(r){return r.studentId||r.studentName;})).size,parent=rows.filter(function(r){return r.parentNotified==="yes";}).length;
   document.getElementById("behPositiveStats").innerHTML=[
-    ["⭐",rows.length,tr("سلوك إيجابي","Positive Records"),"green"],["🏆",points,tr("نقاط التعزيز","Reinforcement Points"),"gold"],["👤",students,tr("طلاب مميزون","Distinguished Students"),""],["📱",parent,tr("أُشعر ولي الأمر","Parent Notified"),"green"]
-  ].map(function(k){return "<div class='beh-kpi "+k[3]+"'><span class='beh-kpi-icon'>"+k[0]+"</span><div><strong>"+k[1]+"</strong><small>"+esc(k[2])+"</small></div></div>";}).join("");
+    ["⭐",rows.length,tr("سلوك إيجابي","Positive Records"),"green","records"],["🏆",points,tr("نقاط التعزيز","Reinforcement Points"),"gold","points"],["👤",students,tr("طلاب مميزون","Distinguished Students"),"","students"],["📱",parent,tr("أُشعر ولي الأمر","Parent Notified"),"green","parent"]
+  ].map(function(k){return reportKpi(k[0],k[1],k[2],k[3],k[4]);}).join("");
   document.getElementById("behPositiveCount").textContent=tr("عرض ","Showing ")+rows.length+tr(" من "," of ")+behaviorReportRecords("positive").length;
   body.innerHTML=rows.length?rows.map(function(r){
     var actions=behaviorReportEditable("positive")&&hasPermission("behavior_manage")?"<div class='beh-table-actions'><button class='beh-btn beh-btn-outline beh-btn-sm' onclick=\"editPositiveRecord('"+esc(r.id)+"')\">✏️</button><button class='beh-btn beh-btn-danger beh-btn-sm' onclick=\"deletePositiveRecord('"+esc(r.id)+"')\">🗑️</button></div>":"—";
@@ -715,10 +715,30 @@ window.renderPositiveReport=function(){
 };
 function renderBehaviorStudentCards(rows){
   var target=document.getElementById("behStudentCards");if(!target)return;var map={};
-  rows.forEach(function(r){var key=r.studentId||r.studentName;if(!map[key])map[key]={studentId:r.studentId,name:behaviorReportStudentName(r),points:0,count:0,last:""};map[key].points+=Number(r.points)||0;map[key].count++;if(!map[key].last||r.date>map[key].last)map[key].last=r.date;});
+  rows.forEach(function(r){var key=r.studentId||r.studentName;if(!map[key])map[key]={key:key,studentId:r.studentId,name:behaviorReportStudentName(r),points:0,count:0,last:""};map[key].points+=Number(r.points)||0;map[key].count++;if(!map[key].last||r.date>map[key].last)map[key].last=r.date;});
   var cards=Object.values(map).sort(function(a,b){return b.points-a.points;});
-  target.innerHTML=cards.length?cards.map(function(s){return "<div class='beh-student-card'><strong>"+esc(s.name)+"</strong><div class='score'>"+s.points+" "+tr("نقطة","points")+"</div><small>"+s.count+" "+tr("سجل · آخر تعزيز ","records · last reinforcement ")+displayDate(s.last)+"</small></div>";}).join(""):"<div class='beh-empty'>"+esc(tx("noData"))+"</div>";
+  target.innerHTML=cards.length?cards.map(function(s){return "<div class='beh-student-card beh-student-card-action' role='button' tabindex='0' onclick=\"openBehaviorReportStudentDetails(decodeURIComponent('"+encodeURIComponent(s.key)+"'))\" onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault();openBehaviorReportStudentDetails(decodeURIComponent('"+encodeURIComponent(s.key)+"'))}\"><strong>"+esc(s.name)+"</strong><div class='score'>"+s.points+" "+tr("نقطة","points")+"</div><small>"+s.count+" "+tr("سجل · آخر تعزيز ","records · last reinforcement ")+displayDate(s.last)+"</small></div>";}).join(""):"<div class='beh-empty'>"+esc(tx("noData"))+"</div>";
 }
+
+function reportKpi(icon,value,label,color,type){return "<div class='beh-kpi beh-kpi-action "+color+"' role='button' tabindex='0' aria-label='"+esc(label+": "+value)+"' onclick=\"openBehaviorReportCard('"+type+"')\" onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault();openBehaviorReportCard('"+type+"')}\"><span class='beh-kpi-icon'>"+icon+"</span><div><strong>"+value+"</strong><small>"+esc(label)+"</small></div><span class='beh-kpi-arrow'>›</span></div>";}
+function positiveDetailRows(items){return items.map(function(r){return[r.id||"—",displayDate(r.date),behaviorReportStudentName(r),behaviorReportClassName(r),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),Number(r.points)||0,yesNo(r.parentNotified)];});}
+function positiveReportScope(){var period=behaviorReportPeriod("positive");return typeof dashboardScopeText==="function"?dashboardScopeText(period):"";}
+window.openBehaviorReportCard=function(type){
+  if(!hasPermission("behavior_reports")||typeof window.showDashboardDetails!=="function")return;
+  var all=filteredPositiveRecords(),items=all,title="",icon="",summary="",headers=[tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points"),tr("ولي الأمر","Parent")],rows=[];
+  if(type==="records"){icon="⭐";title=tr("السلوك الإيجابي","Positive Records");rows=positiveDetailRows(items);}
+  else if(type==="points"){icon="🏆";title=tr("نقاط التعزيز","Reinforcement Points");rows=positiveDetailRows(items);summary=items.reduce(function(total,r){return total+(Number(r.points)||0);},0)+" "+tr("نقطة ضمن النتائج المفلترة","points in the filtered results");}
+  else if(type==="parent"){icon="📱";title=tr("أُشعر ولي الأمر","Parent Notified");items=all.filter(function(r){return r.parentNotified==="yes";});rows=positiveDetailRows(items);}
+  else if(type==="students"){
+    icon="👤";title=tr("طلاب مميزون","Distinguished Students");headers=[tr("الطالب","Student"),tr("الفصل","Class"),tr("السجلات","Records"),tr("مجموع النقاط","Total Points")];var map={};
+    all.forEach(function(r){var key=r.studentId||r.studentName;if(!map[key])map[key]={name:behaviorReportStudentName(r),className:behaviorReportClassName(r),count:0,points:0};map[key].count++;map[key].points+=Number(r.points)||0;});rows=Object.values(map).sort(function(a,b){return b.points-a.points;}).map(function(item){return[item.name,item.className,item.count,item.points];});
+  }else return;
+  window.showDashboardDetails({icon:icon,title:title,headers:headers,rows:rows,summary:summary,scope:positiveReportScope()});
+};
+window.openBehaviorReportStudentDetails=function(studentKey){
+  if(!hasPermission("behavior_reports")||typeof window.showDashboardDetails!=="function")return;var all=filteredPositiveRecords(),items=all.filter(function(r){return(r.studentId||r.studentName)===studentKey;}),name=items.length?behaviorReportStudentName(items[0]):tr("الطالب","Student");
+  window.showDashboardDetails({icon:"👤",title:name,headers:[tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points"),tr("ولي الأمر","Parent")],rows:positiveDetailRows(items),scope:positiveReportScope()});
+};
 
 window.renderBehaviorDashboard=function(){
   var target=document.getElementById("behDashboard");if(!target)return;var v=visibleViolations(),p=visiblePositives();
@@ -729,15 +749,57 @@ window.renderBehaviorDashboard=function(){
   target.innerHTML=
     "<div class='behavior-hero'><div><h3>"+esc(tx("dashboard"))+"</h3><p>"+esc(tr("متابعة المشكلات والسلوك الإيجابي ضمن البرنامج والسنة والفصل الدراسي المفتوح.","Monitor problems and positive behavior within the selected program, year, and semester."))+"</p></div><div class='behavior-hero-actions'>"+(hasPermission("behavior_record")?"<button class='beh-btn beh-btn-gold' onclick=\"goBehaviorPage('behavior-log',document.querySelector('#behaviorNav [onclick*=behavior-log]'))\">➕ "+esc(tx("log"))+"</button><button class='beh-btn beh-btn-light' onclick=\"goBehaviorPage('behavior-positive',document.querySelector('#behaviorNav [onclick*=behavior-positive]'))\">⭐ "+esc(tx("positive"))+"</button>":"")+"</div></div>"+
     "<div class='beh-kpis'>"+
-      kpi("⚠️",v.length,tr("إجمالي المشكلات","Total Problems"),"red")+kpi("👤",unique,tr("طلاب لديهم مشكلات","Students with Problems"),"")+kpi("🔴",open,tr("حالات مفتوحة","Open Cases"),"red")+kpi("🟡",follow,tr("قيد المتابعة","Under Follow-up"),"orange")+
-      kpi("🟢",closed,tr("حالات مغلقة","Closed Cases"),"green")+kpi("⭐",p.length,tr("سلوك إيجابي","Positive Records"),"green")+kpi("🏆",points,tr("نقاط التعزيز","Reinforcement Points"),"gold")+kpi("📱",v.filter(function(r){return r.parentNotified==="yes";}).length,tr("إشعار ولي الأمر","Parent Notified"),"")+
+      kpi("⚠️",v.length,tr("إجمالي المشكلات","Total Problems"),"red","problems")+kpi("👤",unique,tr("طلاب لديهم مشكلات","Students with Problems"),"","students")+kpi("🔴",open,tr("حالات مفتوحة","Open Cases"),"red","open")+kpi("🟡",follow,tr("قيد المتابعة","Under Follow-up"),"orange","follow")+
+      kpi("🟢",closed,tr("حالات مغلقة","Closed Cases"),"green","closed")+kpi("⭐",p.length,tr("سلوك إيجابي","Positive Records"),"green","positive")+kpi("🏆",points,tr("نقاط التعزيز","Reinforcement Points"),"gold","points")+kpi("📱",v.filter(function(r){return r.parentNotified==="yes";}).length,tr("إشعار ولي الأمر","Parent Notified"),"","parent")+
     "</div><div class='beh-grid-2'><div class='beh-panel'><div class='beh-panel-head'><h3>"+esc(tr("توزيع المشكلات حسب الدرجة","Problems by Level"))+"</h3></div><div class='beh-panel-body'><div class='beh-level-bars'>"+
-      Object.keys(VIOLATIONS).map(function(key){var count=v.filter(function(r){return r.vlevel===key;}).length;return "<div class='beh-level-row'><span>"+esc(key+" · "+levelLabel(key))+"</span><div class='beh-level-track'><div class='beh-level-fill' style='width:"+Math.round(count/maxLevel*100)+"%'></div></div><strong>"+count+"</strong></div>";}).join("")+
+      Object.keys(VIOLATIONS).map(function(key){var count=v.filter(function(r){return r.vlevel===key;}).length,label=key+" · "+levelLabel(key)+": "+count;return "<div class='beh-level-row dashboard-chart-action' role='button' tabindex='0' aria-label='"+esc(label)+"' onclick=\"openBehaviorDashboardDetails('level-"+esc(key)+"')\" onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault();openBehaviorDashboardDetails('level-"+esc(key)+"')}\"><span>"+esc(key+" · "+levelLabel(key))+"</span><div class='beh-level-track'><div class='beh-level-fill' style='width:"+Math.round(count/maxLevel*100)+"%'></div></div><strong>"+count+"</strong></div>";}).join("")+
     "</div></div></div><div class='beh-panel'><div class='beh-panel-head'><h3>"+esc(tr("أحدث الحالات","Recent Cases"))+"</h3><button class='beh-btn beh-btn-outline beh-btn-sm' onclick=\"goBehaviorPage('behavior-records',document.querySelector('#behaviorNav [onclick*=behavior-records]'))\">"+esc(tr("عرض الكل","View All"))+"</button></div><div class='beh-panel-body'><div class='beh-recent'>"+
       (recent.length?recent.map(function(r){return "<div class='beh-recent-item'><span class='beh-badge beh-level-"+esc(r.vlevel)+"'>"+esc(r.vlevel)+"</span><div><strong>"+esc(studentDisplay(r.studentId,r.studentName))+"</strong><small>"+esc(violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype))+"</small></div><small>"+esc(displayDate(r.date))+"</small></div>";}).join(""):"<div class='beh-empty'>"+esc(tx("noData"))+"</div>")+
     "</div></div></div></div>";
 }
-function kpi(icon,value,label,color){return "<div class='beh-kpi "+color+"'><span class='beh-kpi-icon'>"+icon+"</span><div><strong>"+value+"</strong><small>"+esc(label)+"</small></div></div>";}
+function kpi(icon,value,label,color,type){return "<div class='beh-kpi beh-kpi-action "+color+"' role='button' tabindex='0' aria-label='"+esc(label+": "+value)+"' onclick=\"openBehaviorDashboardDetails('"+type+"')\" onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault();openBehaviorDashboardDetails('"+type+"')}\"><span class='beh-kpi-icon'>"+icon+"</span><div><strong>"+value+"</strong><small>"+esc(label)+"</small></div><span class='beh-kpi-arrow'>›</span></div>";}
+
+window.openBehaviorDashboardDetails=function(type){
+  if(!hasPermission("behavior_dashboard")||typeof window.showDashboardDetails!=="function")return;
+  var violations=visibleViolations(),positives=visiblePositives(),records=[],headers=[],title="",icon="",summary="";
+  var canSeeRecords=hasPermission("behavior_record")||hasPermission("behavior_manage")||hasPermission("behavior_reports");
+  if(!canSeeRecords){
+    var source=[],valueFor=function(){return 1;},uniqueStudents=false,labels={problems:["⚠️",tr("إجمالي المشكلات","Total Problems")],students:["👤",tr("طلاب لديهم مشكلات","Students with Problems")],open:["🔴",tr("حالات مفتوحة","Open Cases")],follow:["🟡",tr("قيد المتابعة","Under Follow-up")],closed:["🟢",tr("حالات مغلقة","Closed Cases")],positive:["⭐",tr("سلوك إيجابي","Positive Records")],points:["🏆",tr("نقاط التعزيز","Reinforcement Points")],parent:["📱",tr("إشعار ولي الأمر","Parent Notified")]};
+    if(type==="positive"||type==="points")source=positives;
+    else if(type==="students"){source=violations;uniqueStudents=true;}
+    else if(type==="open"||type==="follow"||type==="closed")source=violations.filter(function(r){return(r.status||"open")===type;});
+    else if(type==="parent")source=violations.filter(function(r){return r.parentNotified==="yes";});
+    else if(type.indexOf("level-")===0){source=violations.filter(function(r){return r.vlevel===type.slice(6);});labels[type]=["📊",type.slice(6)+" · "+levelLabel(type.slice(6))];}
+    else source=violations;
+    if(type==="points")valueFor=function(r){return Number(r.points)||0;};
+    var grouped={};source.forEach(function(r){var key=r.classId||"unknown";if(!grouped[key])grouped[key]={className:classDisplay(r.classId,r.className),value:0,students:{}};if(uniqueStudents)grouped[key].students[r.studentId||r.studentName]=true;else grouped[key].value+=valueFor(r);});
+    records=Object.values(grouped).map(function(item){return[item.className,uniqueStudents?Object.keys(item.students).length:item.value];});var selectedAggregate=labels[type]||labels.problems;
+    window.showDashboardDetails({icon:selectedAggregate[0],title:selectedAggregate[1],headers:[tr("الفصل","Class"),type==="points"?tr("النقاط","Points"):type==="students"?tr("الطلاب","Students"):tr("العدد","Count")],rows:records});return;
+  }
+  var problemRows=function(items){return items.slice().sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""));}).map(function(r){return[r.id||"—",displayDate(r.date),studentDisplay(r.studentId,r.studentName),classDisplay(r.classId,r.className),violationTypeLabel(r.vlevel,r.vtypeKey||r.vtype),statusLabel(r.status)];});};
+  if(type==="problems"||type==="open"||type==="follow"||type==="closed"||type==="parent"||type.indexOf("level-")===0){
+    var filtered=violations;
+    if(type==="open"||type==="follow"||type==="closed")filtered=violations.filter(function(r){return(r.status||"open")===type;});
+    if(type==="parent")filtered=violations.filter(function(r){return r.parentNotified==="yes";});
+    if(type.indexOf("level-")===0)filtered=violations.filter(function(r){return r.vlevel===type.slice(6);});
+    var labels={problems:["⚠️",tr("إجمالي المشكلات","Total Problems")],open:["🔴",tr("حالات مفتوحة","Open Cases")],follow:["🟡",tr("قيد المتابعة","Under Follow-up")],closed:["🟢",tr("حالات مغلقة","Closed Cases")],parent:["📱",tr("إشعار ولي الأمر","Parent Notified")]};
+    var selected=labels[type]||["📊",type.slice(6)+" · "+levelLabel(type.slice(6))];
+    icon=selected[0];title=selected[1];headers=[tr("رقم الحالة","Case No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("المشكلة","Problem"),tr("الحالة","Status")];records=problemRows(filtered);
+  }else if(type==="students"){
+    icon="👤";title=tr("طلاب لديهم مشكلات","Students with Problems");headers=[tr("الطالب","Student"),tr("الفصل","Class"),tr("عدد المشكلات","Problems"),tr("آخر حالة","Latest Case")];
+    var studentMap={};violations.forEach(function(r){var key=r.studentId||r.studentName;if(!studentMap[key])studentMap[key]={name:studentDisplay(r.studentId,r.studentName),className:classDisplay(r.classId,r.className),count:0,last:""};studentMap[key].count++;if(!studentMap[key].last||r.date>studentMap[key].last)studentMap[key].last=r.date;});
+    records=Object.values(studentMap).sort(function(a,b){return b.count-a.count;}).map(function(item){return[item.name,item.className,item.count,displayDate(item.last)];});
+  }else if(type==="positive"){
+    icon="⭐";title=tr("السلوك الإيجابي","Positive Records");headers=[tr("الرقم","No."),tr("التاريخ","Date"),tr("الطالب","Student"),tr("الفصل","Class"),tr("نوع السلوك","Behavior Type"),tr("النقاط","Points")];
+    records=positives.slice().sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""));}).map(function(r){return[r.id||"—",displayDate(r.date),studentDisplay(r.studentId,r.studentName),classDisplay(r.classId,r.className),tupleLabel(POSITIVE_BEHAVIORS,r.behaviorTypeKey||r.behaviorType),Number(r.points)||0];});
+  }else if(type==="points"){
+    icon="🏆";title=tr("نقاط التعزيز","Reinforcement Points");headers=[tr("الطالب","Student"),tr("الفصل","Class"),tr("السجلات","Records"),tr("مجموع النقاط","Total Points")];
+    var pointsMap={};positives.forEach(function(r){var key=r.studentId||r.studentName;if(!pointsMap[key])pointsMap[key]={name:studentDisplay(r.studentId,r.studentName),className:classDisplay(r.classId,r.className),count:0,points:0};pointsMap[key].count++;pointsMap[key].points+=Number(r.points)||0;});
+    records=Object.values(pointsMap).sort(function(a,b){return b.points-a.points;}).map(function(item){return[item.name,item.className,item.count,item.points];});
+    summary=positives.reduce(function(total,r){return total+(Number(r.points)||0);},0)+" "+tr("نقطة ضمن صلاحياتك","points within your access");
+  }else return;
+  window.showDashboardDetails({icon:icon,title:title,headers:headers,rows:records,summary:summary});
+};
 
 function renderBehaviorReferences(proceduresOnly){
   var target=document.getElementById(proceduresOnly?"behProceduresGrid":"behReferenceGrid");if(!target)return;

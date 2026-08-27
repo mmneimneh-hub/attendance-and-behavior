@@ -154,6 +154,17 @@ body{background:var(--slate-50);color:var(--slate-800);min-height:100vh;font-siz
   box-shadow:var(--shadow-sm);border:1px solid var(--slate-200);
   display:flex;align-items:center;gap:14px;transition:box-shadow .2s}
 .sc:hover{box-shadow:var(--shadow)}
+.dash-card-action{cursor:pointer;position:relative;transition:box-shadow .2s,transform .2s,border-color .2s}
+.dash-card-action:hover{transform:translateY(-2px);border-color:var(--brand-mid)}
+.dash-card-action:focus-visible{outline:3px solid rgba(27,79,130,.22);outline-offset:3px;border-color:var(--brand)}
+.dash-card-action::after{content:'›';margin-inline-start:auto;color:var(--slate-300);font-size:1.35rem;font-weight:800;line-height:1}
+html[dir="rtl"] .dash-card-action::after{transform:rotate(180deg)}
+.dashboard-chart-action{cursor:pointer;border-radius:8px;transition:background .2s,transform .2s}
+.dashboard-chart-action:hover{background:var(--slate-50);transform:translateY(-2px)}
+.dashboard-chart-action:focus-visible{outline:3px solid rgba(27,79,130,.22);outline-offset:2px}
+.compact-card-action{cursor:pointer;transition:background .2s,transform .2s,box-shadow .2s}
+.compact-card-action:hover{background:var(--slate-50);transform:translateY(-2px);box-shadow:var(--shadow-sm)}
+.compact-card-action:focus-visible{outline:3px solid rgba(27,79,130,.22);outline-offset:-3px}
 .sc-ico{width:44px;height:44px;border-radius:var(--radius);display:flex;align-items:center;
   justify-content:center;font-size:19px;flex-shrink:0}
 .sc.b .sc-ico{background:var(--brand-light)}.sc.g .sc-ico{background:var(--success-bg)}
@@ -311,6 +322,13 @@ html[dir="rtl"] .mini-stat{border-left:none;border-right:1px solid var(--slate-1
   padding-bottom:12px;border-bottom:1px solid var(--slate-100)}
 .ma{display:flex;gap:8px;margin-top:20px;justify-content:flex-end;
   padding-top:14px;border-top:1px solid var(--slate-100)}
+.dashboard-detail-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.dashboard-detail-scope{color:var(--slate-600);font-size:.79rem;line-height:1.6}
+.dashboard-detail-summary{color:var(--brand);font-weight:800;font-size:.82rem}
+.dashboard-detail-table{max-height:55vh;overflow:auto;border:1px solid var(--slate-200);border-radius:var(--radius)}
+.dashboard-detail-table table{min-width:620px}
+.dashboard-detail-table th{position:sticky;top:0;background:var(--slate-50);z-index:1}
+.dashboard-detail-empty{text-align:center;padding:38px 16px;color:var(--slate-400)}
 
 /* ══════════ TABS ══════════ */
 .tabs{display:flex;border-bottom:1.5px solid var(--slate-200);margin-bottom:18px;
@@ -347,11 +365,15 @@ html[dir="rtl"] .mini-stat{border-left:none;border-right:1px solid var(--slate-1
 .pf.hi{background:var(--success)}.pf.mi{background:var(--warning)}.pf.lo{background:var(--danger)}
 
 /* ══════════ CHART ══════════ */
-.chart{background:var(--slate-50);border-radius:var(--radius);padding:16px;
-  height:160px;display:flex;align-items:flex-end;gap:6px;border:1px solid var(--slate-100)}
-.cb-w{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
-.cb-bar{width:100%;border-radius:3px 3px 0 0;min-height:4px;transition:height .6s}
-.cb-lbl{font-size:.66rem;color:var(--slate-400);font-weight:600;white-space:nowrap}
+.chart{background-color:var(--slate-50);background-image:linear-gradient(to top,rgba(148,163,184,.18) 1px,transparent 1px);background-size:100% 25%;border-radius:var(--radius);padding:12px 14px 10px;
+  height:210px;display:flex;align-items:stretch;gap:8px;border:1px solid var(--slate-100)}
+.cb-w{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0;padding:3px 4px}
+.cb-value{height:18px;font-size:.68rem;color:var(--slate-600);font-weight:800;white-space:nowrap}
+.cb-track{display:flex;align-items:flex-end;justify-content:center;flex:1;width:100%;min-height:0}
+.cb-bar{width:min(54px,78%);border-radius:7px 7px 2px 2px;min-height:0;box-shadow:0 3px 8px rgba(15,23,42,.12);transition:height .6s,filter .2s}
+.dashboard-chart-action:hover .cb-bar{filter:brightness(.94)}
+.cb-lbl{font-size:.69rem;color:var(--slate-500);font-weight:700;white-space:nowrap}
+.cb-lbl small{display:block;font-size:.58rem;color:var(--slate-400);margin-top:1px;font-weight:500}
 
 /* ══════════ PERMISSIONS TOGGLE ══════════ */
 .perm-toggle{position:relative;display:inline-block;width:38px;height:21px;cursor:pointer}
@@ -921,6 +943,20 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
 </div><!-- /app -->
 
 <!-- ══════════════ MODALS ══════════════ -->
+<div class="mo" id="mDashboardDetails">
+  <div class="mb" style="max-width:1000px">
+    <h3 id="dashboardDetailsTitle"></h3>
+    <div class="dashboard-detail-meta">
+      <div class="dashboard-detail-scope" id="dashboardDetailsScope"></div>
+      <div class="dashboard-detail-summary" id="dashboardDetailsSummary"></div>
+    </div>
+    <div id="dashboardDetailsBody"></div>
+    <div class="ma">
+      <button class="btn btn-gr" onclick="closeM('mDashboardDetails')"><span data-ar="إغلاق" data-en="Close">إغلاق</span></button>
+    </div>
+  </div>
+</div>
+
 <div class="mo" id="mStu">
   <div class="mb">
     <h3>➕ <span data-ar="إضافة / تعديل طالب" data-en="Add / Edit Student">إضافة / تعديل طالب</span></h3>
@@ -2023,6 +2059,24 @@ function checkDup(){
   w.style.display=(cls&&date&&saved&&Object.keys(saved).length)?'flex':'none';
 }
 
+function attendanceEntryItems(){
+  const classId=document.getElementById('attClass').value,date=document.getElementById('attDate').value;
+  const cls=visibleClasses().find(item=>item.id===classId);if(!cls||!date)return[];
+  const saved=db.attendance?.[classId]?.[date]||{};
+  return visibleStudents().filter(student=>student.classId===classId).map(student=>({class:cls,student,record:saved[student.id]||{status:'present'},date}));
+}
+function openAttendanceEntryCard(type){
+  if(!hasPermission('attendance'))return;
+  const all=attendanceEntryItems();if(!all.length&&!document.getElementById('attClass').value)return;
+  const labels={total:['👥',LANG==='ar'?'طلاب الفصل':'Class Students'],present:['✅',t('present')],excused:['✓',t('excusedAbsence')],unexcused:['!',t('unexcusedAbsence')],tardy:['⏰',t('tardy')],early:['🕐',t('earlyLeave')],rate:['📊',LANG==='ar'?'نسبة الحضور':'Attendance Rate']};
+  if(!labels[type])return;
+  const records=['total','rate'].includes(type)?all:all.filter(item=>dashboardRecordMatches(item.record,type));
+  const present=all.filter(item=>item.record.status==='present'||item.record.status==='tardy').length;
+  const rate=all.length?Math.round(present/all.length*100):0;
+  showDashboardDetails({icon:labels[type][0],title:labels[type][1],headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records),summary:type==='rate'?`${rate}% · ${records.length} ${LANG==='ar'?'طالب ضمن صلاحياتك':'students within your access'}`:''});
+}
+window.openAttendanceEntryCard=openAttendanceEntryCard;
+
 function loadAttTable(){
   checkDup();
   const cls=document.getElementById('attClass').value;
@@ -2039,13 +2093,13 @@ function loadAttTable(){
   students.forEach(s=>{const rec=saved[s.id];const st=rec?.status||'present';if(st==='absent'){if(normalizedAbsenceType(rec)==='unexcused')cau++;else cae++;}else if(st==='tardy')ct++;else if(st==='early')ce++;else cp++;});
   // Mini stats
   document.getElementById('attMini').innerHTML=`
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--brand)">${students.length}</div><div class="mini-stat-lbl">${t('total')}</div></div>
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--success)" id="mcP">${cp}</div><div class="mini-stat-lbl">✅ ${t('present')}</div></div>
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--danger)" id="mcAE">${cae}</div><div class="mini-stat-lbl">✓ ${t('excusedAbsence')}</div></div>
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--danger)" id="mcAU">${cau}</div><div class="mini-stat-lbl">! ${t('unexcusedAbsence')}</div></div>
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--brand)" id="mcT">${ct}</div><div class="mini-stat-lbl">⏰ ${t('tardy')}</div></div>
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--warning)" id="mcE">${ce}</div><div class="mini-stat-lbl">🕐 ${t('earlyLeave')}</div></div>
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--brand)" id="mcPct">${students.length>0?Math.round((cp+ct)/students.length*100):0}%</div><div class="mini-stat-lbl">%</div></div>`;
+    <div class="mini-stat compact-card-action" role="button" tabindex="0" onclick="openAttendanceEntryCard('total')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceEntryCard('total')}"><div class="mini-stat-num" style="color:var(--brand)">${students.length}</div><div class="mini-stat-lbl">${t('total')}</div></div>
+    <div class="mini-stat compact-card-action" role="button" tabindex="0" onclick="openAttendanceEntryCard('present')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceEntryCard('present')}"><div class="mini-stat-num" style="color:var(--success)" id="mcP">${cp}</div><div class="mini-stat-lbl">✅ ${t('present')}</div></div>
+    <div class="mini-stat compact-card-action" role="button" tabindex="0" onclick="openAttendanceEntryCard('excused')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceEntryCard('excused')}"><div class="mini-stat-num" style="color:var(--danger)" id="mcAE">${cae}</div><div class="mini-stat-lbl">✓ ${t('excusedAbsence')}</div></div>
+    <div class="mini-stat compact-card-action" role="button" tabindex="0" onclick="openAttendanceEntryCard('unexcused')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceEntryCard('unexcused')}"><div class="mini-stat-num" style="color:var(--danger)" id="mcAU">${cau}</div><div class="mini-stat-lbl">! ${t('unexcusedAbsence')}</div></div>
+    <div class="mini-stat compact-card-action" role="button" tabindex="0" onclick="openAttendanceEntryCard('tardy')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceEntryCard('tardy')}"><div class="mini-stat-num" style="color:var(--brand)" id="mcT">${ct}</div><div class="mini-stat-lbl">⏰ ${t('tardy')}</div></div>
+    <div class="mini-stat compact-card-action" role="button" tabindex="0" onclick="openAttendanceEntryCard('early')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceEntryCard('early')}"><div class="mini-stat-num" style="color:var(--warning)" id="mcE">${ce}</div><div class="mini-stat-lbl">🕐 ${t('earlyLeave')}</div></div>
+    <div class="mini-stat compact-card-action" role="button" tabindex="0" onclick="openAttendanceEntryCard('rate')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceEntryCard('rate')}"><div class="mini-stat-num" style="color:var(--brand)" id="mcPct">${students.length>0?Math.round((cp+ct)/students.length*100):0}%</div><div class="mini-stat-lbl">%</div></div>`;
   if(!students.length){document.getElementById('attRows').innerHTML=`<div style="text-align:center;padding:30px;color:var(--slate-400)">${t('noStudents')}</div>`;return;}
   document.getElementById('attRows').innerHTML=students.map((s,i)=>{
     const rec=saved[s.id]||{};
@@ -2310,7 +2364,9 @@ async function saveAttRecord(){
 // ════════════════════════════════════════════
 function getStuStats(sid,from,to,month,year){
   let p=0,a=0,ae=0,au=0,tardy=0,e=0,ad=[],aed=[],aud=[];
+  const permittedClassIds=user?new Set(visibleClasses().map(cls=>cls.id)):null;
   Object.entries(db.attendance).forEach(([cls,byDate])=>{
+    if(permittedClassIds&&!permittedClassIds.has(cls))return;
     Object.entries(byDate).forEach(([date,byStu])=>{
       const dd=new Date(date);
       if(from&&date<from)return; if(to&&date>to)return;
@@ -2331,38 +2387,145 @@ function getStuStats(sid,from,to,month,year){
 // ════════════════════════════════════════════
 // DASHBOARD
 // ════════════════════════════════════════════
+function dashboardVisibleUsers(){
+  const grades=new Set(allowedGrades(db.activeProgram));
+  return Object.values(db.teachers||{}).filter(account=>(account.programs||PROGRAMS).includes(db.activeProgram)&&programGradesFor(account,db.activeProgram).some(grade=>grades.has(grade)));
+}
+function dashboardAttendanceRecords(date=today()){
+  const students=new Set(visibleStudents().map(student=>student.id));
+  return visibleClasses().flatMap(cls=>Object.entries(db.attendance?.[cls.id]?.[date]||{}).filter(([studentId])=>students.has(studentId)).map(([studentId,record])=>({class:cls,student:db.students[studentId]||{id:studentId,name:studentId},record,date})));
+}
+function dashboardStudentStats(studentId){
+  const records=visibleClasses().flatMap(cls=>Object.values(db.attendance?.[cls.id]||{}).map(byStudent=>byStudent?.[studentId]).filter(Boolean));
+  return records.reduce((stats,record)=>{
+    if(record.status==='absent'){stats.absent++;if(normalizedAbsenceType(record)==='unexcused')stats.unexcusedAbsence++;else stats.excusedAbsence++;}
+    else if(record.status==='tardy')stats.tardy++;
+    else if(record.status==='early')stats.early++;
+    else stats.present++;
+    return stats;
+  },{present:0,absent:0,excusedAbsence:0,unexcusedAbsence:0,tardy:0,early:0});
+}
+function dashboardClassAttendanceRate(cls,students){
+  const ids=new Set(students.filter(student=>student.classId===cls.id).map(student=>student.id));let present=0,total=0;
+  Object.values(db.attendance?.[cls.id]||{}).forEach(byStudent=>Object.entries(byStudent||{}).forEach(([studentId,record])=>{if(!ids.has(studentId))return;total++;if(record.status==='present'||record.status==='tardy')present++;}));
+  return total?Math.round(present/total*100):null;
+}
+function dashboardRecordMatches(record,type){
+  if(type==='excused')return record.status==='absent'&&normalizedAbsenceType(record)==='excused';
+  if(type==='unexcused')return record.status==='absent'&&normalizedAbsenceType(record)==='unexcused';
+  if(type==='tardy'||type==='early')return record.status===type;
+  return record.status!=='absent'&&record.status!=='tardy'&&record.status!=='early';
+}
+function dashboardStatusLabel(record){
+  if(record.status==='absent')return normalizedAbsenceType(record)==='unexcused'?t('unexcusedAbsence'):t('excusedAbsence');
+  if(record.status==='tardy')return t('tardy');
+  if(record.status==='early')return t('earlyLeave');
+  return t('present');
+}
+function dashboardCard(type,tone,icon,value,label,action='openAttendanceDashboardDetails',style=''){
+  const safeLabel=escapeImportHtml(label);
+  return `<div class="sc ${tone} dash-card-action" role="button" tabindex="0" aria-label="${safeLabel}: ${value}"${style?` style="${style}"`:''} onclick="${action}('${type}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${action}('${type}')}"><div class="sc-ico">${icon}</div><div><div class="sc-num">${value}</div><div class="sc-lbl">${safeLabel}</div></div></div>`;
+}
+function dashboardDateTime(value){
+  if(!value)return'—';
+  const date=new Date(value);
+  return Number.isNaN(date.getTime())?String(value):date.toLocaleString(LANG==='ar'?'ar-SA':'en-GB');
+}
+function dashboardDisplayDate(value){
+  if(!value)return'—';
+  const date=new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime())?String(value):date.toLocaleDateString(LANG==='ar'?'ar-SA':'en-GB');
+}
+function dashboardScopeText(period={academicYear:db.activeAcademicYear,semester:String(db.activeSemester)}){
+  const grades=allowedGrades(db.activeProgram).join(', ')||'—';
+  const semester=String(period.semester)==='both'?(LANG==='ar'?'الفصلان الأول والثاني':'Semesters 1 & 2'):(LANG==='ar'?(String(period.semester)==='1'?'الفصل الأول':'الفصل الثاني'):`Semester ${period.semester}`);
+  return `${LANG==='ar'?'النطاق المسموح':'Allowed scope'}: ${programLabel(db.activeProgram)} · ${LANG==='ar'?'الصفوف':'Grades'} ${grades} · ${period.academicYear} · ${semester}`;
+}
+function showDashboardDetails({icon='',title='',headers=[],rows=[],summary='',scope=''}){
+  document.getElementById('dashboardDetailsTitle').textContent=`${icon} ${title}`.trim();
+  document.getElementById('dashboardDetailsScope').textContent=scope||dashboardScopeText();
+  document.getElementById('dashboardDetailsSummary').textContent=summary||`${rows.length} ${LANG==='ar'?'نتيجة ضمن صلاحياتك':'results within your access'}`;
+  const body=document.getElementById('dashboardDetailsBody');
+  if(!rows.length)body.innerHTML=`<div class="dashboard-detail-empty">📭 ${escapeImportHtml(t('noData'))}</div>`;
+  else body.innerHTML=`<div class="dashboard-detail-table"><table><thead><tr>${headers.map(header=>`<th>${escapeImportHtml(header)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(cell=>`<td>${escapeImportHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  openM('mDashboardDetails',true);
+}
+window.showDashboardDetails=showDashboardDetails;
+function dashboardAttendanceRows(items){
+  return items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||a.student.name.localeCompare(b.student.name,LANG==='ar'?'ar':'en')).map(item=>[dashboardDisplayDate(item.date),item.student.name,className(item.class),dashboardStatusLabel(item.record),item.record.note||'—',item.record.updatedByName||item.record.updatedByEmail||'—',dashboardDateTime(item.record.updatedAt)]);
+}
+function openAttendanceDashboardDetails(type){
+  if(!hasPermission('dashboard'))return;
+  const students=visibleStudents().slice().sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en'));
+  const classes=visibleClasses().slice().sort((a,b)=>className(a).localeCompare(className(b),LANG==='ar'?'ar':'en'));
+  const users=dashboardVisibleUsers().slice().sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en'));
+  const canSeeStudents=hasPermission('attendance')||hasPermission('students_edit')||hasPermission('reports');
+  if(type==='students')return canSeeStudents?showDashboardDetails({icon:'👥',title:`${t('total')} ${LANG==='ar'?'الطلاب':'Students'}`,headers:[LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',t('classes_lbl'),LANG==='ar'?'الصف':'Grade'],rows:students.map(student=>[student.name,student.schoolId||'—',className(db.classes[student.classId]),classGrade(db.classes[student.classId])])}):showDashboardDetails({icon:'👥',title:`${t('total')} ${LANG==='ar'?'الطلاب':'Students'}`,headers:[t('classes_lbl'),LANG==='ar'?'الصف':'Grade',LANG==='ar'?'عدد الطلاب':'Students'],rows:classes.map(cls=>[className(cls),classGrade(cls),students.filter(student=>student.classId===cls.id).length])});
+  if(type==='classes')return showDashboardDetails({icon:'🏫',title:t('classes_lbl'),headers:hasPermission('teachers')?[t('classes_lbl'),LANG==='ar'?'البرنامج':'Program',LANG==='ar'?'الصف':'Grade',LANG==='ar'?'عدد الطلاب':'Students',LANG==='ar'?'المستخدم المسؤول':'Responsible User']:[t('classes_lbl'),LANG==='ar'?'البرنامج':'Program',LANG==='ar'?'الصف':'Grade',LANG==='ar'?'عدد الطلاب':'Students'],rows:classes.map(cls=>{const row=[className(cls),programLabel(cls.program),classGrade(cls),students.filter(student=>student.classId===cls.id).length];if(hasPermission('teachers'))row.push(db.teachers?.[cls.teacherId]?.name||'—');return row;})});
+  if(type==='users'){
+    if(hasPermission('teachers'))return showDashboardDetails({icon:'👨‍🏫',title:t('teachers_lbl'),headers:[LANG==='ar'?'المستخدم':'User',LANG==='ar'?'الدور':'Role',LANG==='ar'?'الصفوف المسموحة':'Allowed Grades',LANG==='ar'?'الحالة':'Status'],rows:users.map(account=>[account.name,t('roles')[account.role]||account.role,programGradesFor(account,db.activeProgram).join(', ')||'—',account.registered===false?(LANG==='ar'?'بانتظار التسجيل':'Pending'):account.active===false?(LANG==='ar'?'معطل':'Inactive'):(LANG==='ar'?'نشط':'Active')])});
+    const roles={};users.forEach(account=>{roles[account.role]=(roles[account.role]||0)+1;});return showDashboardDetails({icon:'👨‍🏫',title:t('teachers_lbl'),headers:[LANG==='ar'?'الدور':'Role',LANG==='ar'?'عدد المستخدمين':'Users'],rows:Object.entries(roles).map(([role,count])=>[t('roles')[role]||role,count])});
+  }
+  const labels={present:[t('todayPresent'),'✅'],excused:[t('todayExcusedAbsence'),'✓'],unexcused:[t('todayUnexcusedAbsence'),'!'],tardy:[t('todayTardy'),'⏰'],early:[t('todayEarly'),'🕐']};
+  if(!labels[type])return;
+  const records=dashboardAttendanceRecords().filter(item=>dashboardRecordMatches(item.record,type));
+  if(!canSeeStudents){const grouped={};records.forEach(item=>{grouped[item.class.id]=(grouped[item.class.id]||0)+1;});return showDashboardDetails({icon:labels[type][1],title:labels[type][0],headers:[t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'العدد':'Count'],rows:classes.map(cls=>[className(cls),type==='present'?t('present'):type==='excused'?t('excusedAbsence'):type==='unexcused'?t('unexcusedAbsence'):type==='tardy'?t('tardy'):t('earlyLeave'),grouped[cls.id]||0])});}
+  showDashboardDetails({icon:labels[type][1],title:labels[type][0],headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records)});
+}
+window.openAttendanceDashboardDetails=openAttendanceDashboardDetails;
+function openAttendanceDashboardDate(date){
+  if(!hasPermission('dashboard'))return;
+  const records=dashboardAttendanceRecords(date);
+  showDashboardDetails({icon:'📈',title:`${LANG==='ar'?'الحضور في':'Attendance on'} ${dashboardDisplayDate(date)}`,headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records)});
+}
+window.openAttendanceDashboardDate=openAttendanceDashboardDate;
+function openAttendanceDashboardClass(classId){
+  if(!hasPermission('dashboard'))return;
+  const cls=visibleClasses().find(item=>item.id===classId);if(!cls)return;
+  const studentIds=new Set(visibleStudents().filter(student=>student.classId===classId).map(student=>student.id));
+  const records=Object.entries(db.attendance?.[classId]||{}).flatMap(([date,byStudent])=>Object.entries(byStudent||{}).filter(([studentId])=>studentIds.has(studentId)).map(([studentId,record])=>({class:cls,student:db.students[studentId],record,date})));
+  showDashboardDetails({icon:'🏫',title:className(cls),headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records)});
+}
+window.openAttendanceDashboardClass=openAttendanceDashboardClass;
 function renderDashboard(){
   const stus=visibleStudents();
   const cls=visibleClasses();
-  const tch=Object.values(db.teachers).filter(tc=>(tc.programs||PROGRAMS).includes(db.activeProgram));
-  const td=today(); let tdAE=0,tdAU=0,tdT=0,tdE=0,tdP=0;
-  Object.values(db.attendance).forEach(bd=>{if(!bd[td])return;Object.values(bd[td]).forEach(r=>{if(r.status==='absent'){if(normalizedAbsenceType(r)==='unexcused')tdAU++;else tdAE++;}else if(r.status==='tardy')tdT++;else if(r.status==='early')tdE++;else tdP++;});});
-  document.getElementById('dashStats').innerHTML=`
-    <div class="sc b"><div class="sc-ico">👥</div><div><div class="sc-num">${stus.length}</div><div class="sc-lbl">${t('total')} ${LANG==='ar'?'الطلاب':'Students'}</div></div></div>
-    <div class="sc t"><div class="sc-ico">🏫</div><div><div class="sc-num">${cls.length}</div><div class="sc-lbl">${t('classes_lbl')}</div></div></div>
-    <div class="sc p"><div class="sc-ico">👨‍🏫</div><div><div class="sc-num">${tch.length}</div><div class="sc-lbl">${t('teachers_lbl')}</div></div></div>
-    <div class="sc g"><div class="sc-ico">✅</div><div><div class="sc-num">${tdP}</div><div class="sc-lbl">${t('todayPresent')}</div></div></div>
-    <div class="sc r"><div class="sc-ico">✓</div><div><div class="sc-num">${tdAE}</div><div class="sc-lbl">${t('todayExcusedAbsence')}</div></div></div>
-    <div class="sc r"><div class="sc-ico">!</div><div><div class="sc-num">${tdAU}</div><div class="sc-lbl">${t('todayUnexcusedAbsence')}</div></div></div>
-    <div class="sc b"><div class="sc-ico">⏰</div><div><div class="sc-num">${tdT}</div><div class="sc-lbl">${t('todayTardy')}</div></div></div>
-    <div class="sc o"><div class="sc-ico">🕐</div><div><div class="sc-num">${tdE}</div><div class="sc-lbl">${t('todayEarly')}</div></div></div>`;
+  const tch=dashboardVisibleUsers();
+  const td=today(),todayRecords=dashboardAttendanceRecords(td);
+  const tdAE=todayRecords.filter(item=>dashboardRecordMatches(item.record,'excused')).length;
+  const tdAU=todayRecords.filter(item=>dashboardRecordMatches(item.record,'unexcused')).length;
+  const tdT=todayRecords.filter(item=>dashboardRecordMatches(item.record,'tardy')).length;
+  const tdE=todayRecords.filter(item=>dashboardRecordMatches(item.record,'early')).length;
+  const tdP=todayRecords.filter(item=>dashboardRecordMatches(item.record,'present')).length;
+  document.getElementById('dashStats').innerHTML=[
+    dashboardCard('students','b','👥',stus.length,`${t('total')} ${LANG==='ar'?'الطلاب':'Students'}`),
+    dashboardCard('classes','t','🏫',cls.length,t('classes_lbl')),
+    dashboardCard('users','p','👨‍🏫',tch.length,t('teachers_lbl')),
+    dashboardCard('present','g','✅',tdP,t('todayPresent')),
+    dashboardCard('excused','r','✓',tdAE,t('todayExcusedAbsence')),
+    dashboardCard('unexcused','r','!',tdAU,t('todayUnexcusedAbsence')),
+    dashboardCard('tardy','b','⏰',tdT,t('todayTardy')),
+    dashboardCard('early','o','🕐',tdE,t('todayEarly'))
+  ].join('');
   // Chart
   const ch=document.getElementById('dashChart'); ch.innerHTML='';
   for(let i=6;i>=0;i--){
     const d=new Date(); d.setDate(d.getDate()-i);
     const ds=d.toISOString().split('T')[0]; let p=0,tot=0;
-    Object.values(db.attendance).forEach(bd=>{if(!bd[ds])return;Object.values(bd[ds]).forEach(r=>{tot++;if(r.status==='present'||r.status==='tardy')p++;});});
+    dashboardAttendanceRecords(ds).forEach(item=>{tot++;if(item.record.status==='present'||item.record.status==='tardy')p++;});
     const pct=tot>0?Math.round(p/tot*100):0;
     const days=LANG==='ar'?['أح','اث','ثل','أر','خم','جم','سب']:['Su','Mo','Tu','We','Th','Fr','Sa'];
-    ch.innerHTML+=`<div class="cb-w"><div class="cb-bar" style="height:${Math.max(pct,4)}%;background:${pct>=90?'var(--success)':pct>=70?'var(--warning)':'var(--danger)'}"></div><div class="cb-lbl">${days[d.getDay()]}</div></div>`;
+    const chartLabel=`${dashboardDisplayDate(ds)}: ${pct}% (${tot} ${LANG==='ar'?'سجلات':'records'})`;
+    ch.innerHTML+=`<div class="cb-w dashboard-chart-action" role="button" tabindex="0" title="${escapeImportHtml(chartLabel)}" aria-label="${escapeImportHtml(chartLabel)}" onclick="openAttendanceDashboardDate('${ds}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceDashboardDate('${ds}')}"><div class="cb-value">${tot?`${pct}%`:'—'}</div><div class="cb-track"><div class="cb-bar" style="height:${tot?pct:0}%;background:${pct>=90?'var(--success)':pct>=70?'var(--warning)':'var(--danger)'}"></div></div><div class="cb-lbl">${days[d.getDay()]}<small>${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}</small></div></div>`;
   }
   // Top classes
-  const topCls=cls.map(c=>{const ss=stus.filter(s=>s.classId===c.id);let p=0,tot=0;ss.forEach(s=>{const st=getStuStats(s.id);p+=st.present+st.tardy;tot+=st.present+st.absent+st.tardy+st.early;});return{...c,pct:tot>0?Math.round(p/tot*100):100};}).sort((a,b)=>b.pct-a.pct).slice(0,6);
-  document.getElementById('dashTopCls').innerHTML=topCls.map(c=>`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:.81rem;font-weight:600;margin-bottom:3px"><span>${className(c)}</span><span style="color:${c.pct>=90?'var(--success)':c.pct>=70?'var(--warning)':'var(--danger)'}">${c.pct}%</span></div><div class="pb"><div class="pf ${c.pct>=90?'hi':c.pct>=70?'mi':'lo'}" style="width:${c.pct}%"></div></div></div>`).join('');
+  const topCls=cls.map(c=>({...c,pct:dashboardClassAttendanceRate(c,stus)})).sort((a,b)=>(b.pct??-1)-(a.pct??-1)).slice(0,6);
+  document.getElementById('dashTopCls').innerHTML=topCls.map(c=>{const pct=c.pct??0,label=c.pct===null?'—':`${c.pct}%`;return`<div class="dashboard-chart-action" role="button" tabindex="0" aria-label="${escapeImportHtml(className(c))}: ${label}" onclick="openAttendanceDashboardClass('${escapeImportHtml(c.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceDashboardClass('${escapeImportHtml(c.id)}')}" style="margin-bottom:10px;padding:4px"><div style="display:flex;justify-content:space-between;font-size:.81rem;font-weight:600;margin-bottom:3px"><span>${escapeImportHtml(className(c))}</span><span style="color:${c.pct===null?'var(--slate-400)':c.pct>=90?'var(--success)':c.pct>=70?'var(--warning)':'var(--danger)'}">${label}</span></div><div class="pb"><div class="pf ${c.pct===null?'':c.pct>=90?'hi':c.pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div></div>`;}).join('');
   // Most absent
-  const top=stus.map(s=>{const st=getStuStats(s.id);return{...s,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence};}).filter(s=>s.absent>0).sort((a,b)=>b.absent-a.absent).slice(0,7);
+  const top=stus.map(s=>{const st=dashboardStudentStats(s.id);return{...s,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence};}).filter(s=>s.absent>0).sort((a,b)=>b.absent-a.absent).slice(0,7);
   document.getElementById('dashAbsent').innerHTML=top.length?top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${db.classes[s.classId]?className(db.classes[s.classId]):s.classId}</span></td><td><span class="badge bg-r">${s.excusedAbsence}</span></td><td><span class="badge bg-r">${s.unexcusedAbsence}</span></td></tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--success)">${t('noAbsent')} 🎉</td></tr>`;
-  document.getElementById('dashToday').innerHTML=`<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px"><div style="background:var(--success-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--success-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--success)">${tdP}</div><div style="font-size:.72rem;color:var(--success);margin-top:2px">${t('present')}</div></div><div style="background:var(--danger-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--danger-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--danger)">${tdAE}</div><div style="font-size:.72rem;color:var(--danger);margin-top:2px">${t('excusedAbsence')}</div></div><div style="background:var(--danger-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--danger-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--danger)">${tdAU}</div><div style="font-size:.72rem;color:var(--danger);margin-top:2px">${t('unexcusedAbsence')}</div></div><div style="background:var(--brand-light);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--brand-mid)"><div style="font-size:1.6rem;font-weight:900;color:var(--brand)">${tdT}</div><div style="font-size:.72rem;color:var(--brand);margin-top:2px">${t('tardy')}</div></div><div style="background:var(--warning-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--warning-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--warning)">${tdE}</div><div style="font-size:.72rem;color:var(--warning);margin-top:2px">${t('earlyLeave')}</div></div></div>`;
+  const todayMini=(type,value,label,style)=>`<div class="dash-card-action" role="button" tabindex="0" aria-label="${escapeImportHtml(label)}: ${value}" onclick="openAttendanceDashboardDetails('${type}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceDashboardDetails('${type}')}" style="${style};border-radius:var(--radius);padding:16px;text-align:center"><div style="font-size:1.6rem;font-weight:900">${value}</div><div style="font-size:.72rem;margin-top:2px">${escapeImportHtml(label)}</div></div>`;
+  document.getElementById('dashToday').innerHTML=`<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px">${todayMini('present',tdP,t('present'),'background:var(--success-bg);border:1px solid var(--success-border);color:var(--success)')}${todayMini('excused',tdAE,t('excusedAbsence'),'background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger)')}${todayMini('unexcused',tdAU,t('unexcusedAbsence'),'background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger)')}${todayMini('tardy',tdT,t('tardy'),'background:var(--brand-light);border:1px solid var(--brand-mid);color:var(--brand)')}${todayMini('early',tdE,t('earlyLeave'),'background:var(--warning-bg);border:1px solid var(--warning-border);color:var(--warning)')}</div>`;
 }
 
 // ════════════════════════════════════════════
@@ -2672,6 +2835,24 @@ function fillRptStuList(){
   if([...sel.options].some(option=>option.value===previous))sel.value=previous;
 }
 
+function openStudentReportCard(type){
+  if(!hasPermission('reports'))return;
+  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(()=>openStudentReportCard(type));
+  const studentId=document.getElementById('rStuS').value,student=db.students[studentId];if(!student||!visibleStudents().some(item=>item.id===studentId))return;
+  const month=document.getElementById('rStuMon').value;
+  const items=visibleClasses().flatMap(cls=>Object.entries(db.attendance?.[cls.id]||{}).flatMap(([date,byStudent])=>{
+    const record=byStudent?.[studentId];if(!record||month&&new Date(`${date}T00:00:00`).getMonth()+1!==Number(month))return[];
+    return[{class:cls,student,record,date}];
+  }));
+  const labels={days:['📅',LANG==='ar'?'الأيام المسجلة':'Recorded Days'],present:['✅',t('present')],excused:['✓',t('excusedAbsence')],unexcused:['!',t('unexcusedAbsence')],tardy:['⏰',t('tardy')],early:['🕐',t('earlyLeave')],rate:['📊',LANG==='ar'?'نسبة الحضور':'Attendance Rate']};
+  if(!labels[type])return;
+  const records=['days','rate'].includes(type)?items:items.filter(item=>dashboardRecordMatches(item.record,type));
+  const present=items.filter(item=>item.record.status==='present'||item.record.status==='tardy').length,rate=items.length?Math.round(present/items.length*100):0;
+  const period=window.__attendanceReportContext||selectedReportAcademicPeriod();
+  showDashboardDetails({icon:labels[type][0],title:`${student.name} · ${labels[type][1]}`,headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records),summary:type==='rate'?`${rate}% · ${items.length} ${LANG==='ar'?'يوماً مسجلاً':'recorded days'}`:'',scope:dashboardScopeText(period)});
+}
+window.openStudentReportCard=openStudentReportCard;
+
 function renderStuRpt(){
   if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderStuRpt);
   const sid=document.getElementById('rStuS').value;
@@ -2680,7 +2861,7 @@ function renderStuRpt(){
   if(!sid){out.innerHTML=`<div style="text-align:center;padding:20px;color:var(--slate-400)">${LANG==='ar'?'اختر طالباً':'Select a student'}</div>`;return;}
   const stu=db.students[sid]; const cls=stu?db.classes[stu.classId]:null;
   const st=getStuStats(sid,null,null,month||null,null);
-  const tot=st.present+st.absent+st.tardy+st.early; const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):100;
+  const tot=st.present+st.absent+st.tardy+st.early; const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):0;
   const excusedList=st.excusedAbsenceDates.map(d=>`<span class="badge bg-o" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
   const unexcusedList=st.unexcusedAbsenceDates.map(d=>`<span class="badge bg-r" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
   out.innerHTML=`<div style="background:var(--slate-50);border-radius:var(--radius);padding:16px;margin-bottom:14px;border:1px solid var(--slate-200)">
@@ -2688,13 +2869,13 @@ function renderStuRpt(){
     <div style="font-size:.78rem;color:var(--slate-400);margin-top:3px">${cls?className(cls):'—'} | ${stu&&stu.parent?stu.parent:'—'} | ${stu&&stu.parentPhone?stu.parentPhone:'—'}</div>
   </div>
   <div class="sg" style="grid-template-columns:repeat(7,1fr);margin-bottom:14px">
-    <div class="sc b" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">📅</div><div><div class="sc-num" style="font-size:1.2rem">${tot}</div><div class="sc-lbl">${LANG==='ar'?'أيام':'Days'}</div></div></div>
-    <div class="sc g" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">✅</div><div><div class="sc-num" style="font-size:1.2rem">${st.present}</div><div class="sc-lbl">${t('present')}</div></div></div>
-    <div class="sc r" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">✓</div><div><div class="sc-num" style="font-size:1.2rem">${st.excusedAbsence}</div><div class="sc-lbl">${t('excusedAbsence')}</div></div></div>
-    <div class="sc r" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">!</div><div><div class="sc-num" style="font-size:1.2rem">${st.unexcusedAbsence}</div><div class="sc-lbl">${t('unexcusedAbsence')}</div></div></div>
-    <div class="sc b" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">⏰</div><div><div class="sc-num" style="font-size:1.2rem">${st.tardy}</div><div class="sc-lbl">${t('tardy')}</div></div></div>
-    <div class="sc o" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">🕐</div><div><div class="sc-num" style="font-size:1.2rem">${st.early}</div><div class="sc-lbl">${t('earlyLeave')}</div></div></div>
-    <div class="sc p" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">📊</div><div><div class="sc-num" style="font-size:1.2rem">${pct}%</div><div class="sc-lbl">%</div></div></div>
+    ${dashboardCard('days','b','📅',tot,LANG==='ar'?'أيام':'Days','openStudentReportCard','padding:12px')}
+    ${dashboardCard('present','g','✅',st.present,t('present'),'openStudentReportCard','padding:12px')}
+    ${dashboardCard('excused','r','✓',st.excusedAbsence,t('excusedAbsence'),'openStudentReportCard','padding:12px')}
+    ${dashboardCard('unexcused','r','!',st.unexcusedAbsence,t('unexcusedAbsence'),'openStudentReportCard','padding:12px')}
+    ${dashboardCard('tardy','b','⏰',st.tardy,t('tardy'),'openStudentReportCard','padding:12px')}
+    ${dashboardCard('early','o','🕐',st.early,t('earlyLeave'),'openStudentReportCard','padding:12px')}
+    ${dashboardCard('rate','p','📊',`${pct}%`,'%','openStudentReportCard','padding:12px')}
   </div>
   <div style="background:var(--slate-50);border-radius:var(--radius);padding:13px;border:1px solid var(--slate-200)">
     <div style="display:flex;justify-content:space-between;margin-bottom:7px">
@@ -2748,6 +2929,18 @@ function renderTopRpt(){
 // ════════════════════════════════════════════
 // NOTIFICATIONS — FIXED: reads live from db.students
 // ════════════════════════════════════════════
+function notificationCardItems(){
+  const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
+  const classId=document.getElementById('nfClsF')?.value||'',date=document.getElementById('nfDateF')?.value||'',status=document.getElementById('nfStatusF')?.value||'';
+  return(db.notifications||[]).filter(item=>visibleClassIds.has(item.classId)&&(!classId||item.classId===classId)&&(!date||item.date===date)&&(!status||item.status===status)).slice().reverse();
+}
+function openNotificationCard(type){
+  if(!hasPermission('notifications'))return;
+  const labels={total:['🔔',LANG==='ar'?'إجمالي الإشعارات':'Total Notifications'],pending:['⏳',LANG==='ar'?'بانتظار الإرسال':'Pending'],sent:['✅',LANG==='ar'?'تم الإرسال':'Sent']};if(!labels[type])return;
+  const items=notificationCardItems().filter(item=>type==='total'||item.status===type);
+  showDashboardDetails({icon:labels[type][0],title:labels[type][1],headers:[LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطريقة':'Method',LANG==='ar'?'الحالة':'Status',LANG==='ar'?'وقت الإرسال':'Sent At'],rows:items.map(item=>[db.students?.[item.studentId]?.name||'—',className(db.classes?.[item.classId]),dashboardDisplayDate(item.date),item.method||'—',item.status==='sent'?(LANG==='ar'?'تم الإرسال':'Sent'):item.status==='failed'?(LANG==='ar'?'فشل':'Failed'):(LANG==='ar'?'بانتظار الإرسال':'Pending'),dashboardDateTime(item.sentAt)])});
+}
+window.openNotificationCard=openNotificationCard;
 function renderNotifTable(){
   const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
   let addedMissingNotification=false;
@@ -2777,15 +2970,15 @@ function renderNotifTable(){
     return true;
   }).slice().reverse();
 
-  const total=scopedNotifications.length;
-  const pending=scopedNotifications.filter(n=>n.status==='pending').length;
-  const sent=scopedNotifications.filter(n=>n.status==='sent').length;
+  const total=notifs.length;
+  const pending=notifs.filter(n=>n.status==='pending').length;
+  const sent=notifs.filter(n=>n.status==='sent').length;
 
   const statsEl=document.getElementById('notifStats');
   if(statsEl) statsEl.innerHTML=`
-    <div class="sc r"><div class="sc-ico">🔔</div><div><div class="sc-num">${total}</div><div class="sc-lbl">${LANG==='ar'?'إجمالي الإشعارات':'Total Notifications'}</div></div></div>
-    <div class="sc o"><div class="sc-ico">⏳</div><div><div class="sc-num">${pending}</div><div class="sc-lbl">${LANG==='ar'?'بانتظار الإرسال':'Pending'}</div></div></div>
-    <div class="sc g"><div class="sc-ico">✅</div><div><div class="sc-num">${sent}</div><div class="sc-lbl">${LANG==='ar'?'تم الإرسال':'Sent'}</div></div></div>`;
+    ${dashboardCard('total','r','🔔',total,LANG==='ar'?'إجمالي الإشعارات':'Total Notifications','openNotificationCard')}
+    ${dashboardCard('pending','o','⏳',pending,LANG==='ar'?'بانتظار الإرسال':'Pending','openNotificationCard')}
+    ${dashboardCard('sent','g','✅',sent,LANG==='ar'?'تم الإرسال':'Sent','openNotificationCard')}`;
 
   if(!notifs.length){
     document.getElementById('notifTbody').innerHTML=`<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--slate-400)">${total===0?t('noAbsences'):(LANG==='ar'?'لا نتائج للفلتر المحدد':'No results for selected filter')}</td></tr>`;
