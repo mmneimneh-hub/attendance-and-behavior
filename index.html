@@ -646,7 +646,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
           <select id="academicYearSelect" class="context-select" onchange="changeAcademicYear(this.value)" title="السنة الدراسية | Academic Year"></select>
           <select id="semesterSelect" class="context-select" onchange="changeSemester(this.value)" title="الفصل الدراسي | Semester"></select>
         </div>
-        <div class="save-dot-w"><div class="sd"></div><span data-ar="حفظ تلقائي" data-en="Auto saved">حفظ تلقائي</span></div>
+        <div class="save-dot-w"><div class="sd"></div><span id="autoSaveStatus" data-ar="متزامن مباشرة" data-en="Live synced">متزامن مباشرة</span></div>
         <div class="tb-date" id="tbDate">—</div>
       </div>
     </div>
@@ -695,7 +695,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div class="card" id="attCard" style="display:none">
         <div class="ch">
           <h3 id="attCardTitle">—</h3>
-          <button class="btn btn-p btn-sm" onclick="saveAttRecord()">💾 <span data-ar="حفظ السجل" data-en="Save Record">حفظ السجل</span></button>
+          <span class="badge bg-g">● <span data-ar="حفظ ومزامنة تلقائية" data-en="Auto-save & live sync">حفظ ومزامنة تلقائية</span></span>
         </div>
         <div class="mini-bar" id="attMini"></div>
         <div class="qa-bar">
@@ -713,8 +713,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         </div>
         <div id="attRows"></div>
         <div style="padding:10px 16px;background:var(--brand-light);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;border-top:1px solid var(--brand-mid)">
-          <span style="font-size:.78rem;color:var(--brand);font-weight:600">💡 <span data-ar="يتم الحفظ تلقائياً عند كل تغيير" data-en="Auto-saved on every change">يتم الحفظ تلقائياً عند كل تغيير</span></span>
-          <button class="btn btn-p btn-sm" onclick="saveAttRecord()">💾 <span data-ar="حفظ وانتقال للوحة التحكم" data-en="Save & Go to Dashboard">حفظ وانتقال للوحة التحكم</span></button>
+          <span style="font-size:.78rem;color:var(--brand);font-weight:600">💡 <span data-ar="كل تغيير يُحفظ فوراً ويظهر تلقائياً للمستخدمين المخولين" data-en="Every change is saved immediately and appears automatically for authorized users">كل تغيير يُحفظ فوراً ويظهر تلقائياً للمستخدمين المخولين</span></span>
         </div>
       </div>
     </div>
@@ -1425,15 +1424,91 @@ function hydrateActiveAcademicData(){
   ensure();
 }
 let saveTimer=null;
-let autosaveInterval=null;
+let liveSyncInterval=null;
+let liveSyncEventsBound=false;
+let lastServerUpdatedAt='';
+let sharedMutationChain=Promise.resolve();
+let sharedMutationInFlight=0;
+let liveSyncInFlight=false;
+
+function sharedStateRow(result){
+  return Array.isArray(result?.data)?result.data[0]:result?.data;
+}
+
+async function readSharedState(fields='data,updated_at,updated_by'){
+  const result=await window.neonClient.from('school_state').select(fields).eq('singleton',true).limit(1);
+  if(result.error)throw result.error;
+  const row=sharedStateRow(result);
+  if(!row)throw new Error('School state is not initialized');
+  return row;
+}
+
+function setLiveSaveStatus(status){
+  const label=document.getElementById('autoSaveStatus');
+  if(!label)return;
+  const values={
+    saving:LANG==='ar'?'جارٍ الحفظ والمزامنة...':'Saving & syncing...',
+    saved:LANG==='ar'?'محفوظ ومتزامن مباشرة':'Saved & live synced',
+    error:LANG==='ar'?'تعذر الحفظ — ستتم إعادة المحاولة':'Save failed — retrying'
+  };
+  label.textContent=values[status]||values.saved;
+  label.closest('.save-dot-w')?.style.setProperty('color',status==='error'?'var(--warning)':'');
+}
+
+function preserveLiveRecordCollections(latest,next){
+  if(!latest?.academicYears)return next;
+  if(!next.academicYears)next.academicYears={};
+  Object.entries(latest.academicYears).forEach(([yearName,latestYear])=>{
+    if(!next.academicYears[yearName]){next.academicYears[yearName]=copyData(latestYear);return;}
+    const nextYear=next.academicYears[yearName];
+    ['1','2'].forEach(semester=>{
+      const latestSemester=latestYear?.semesters?.[semester];
+      if(!latestSemester)return;
+      if(!nextYear.semesters)nextYear.semesters={};
+      if(!nextYear.semesters[semester])nextYear.semesters[semester]=copyData(latestSemester);
+      const nextSemester=nextYear.semesters[semester];
+      nextSemester.attendance=copyData(latestSemester.attendance||{});
+      const latestBehavior=latestSemester.behavior||emptyBehaviorState();
+      const nextBehavior=nextSemester.behavior||(nextSemester.behavior=emptyBehaviorState());
+      nextBehavior.violations=copyData(latestBehavior.violations||[]);
+      nextBehavior.positives=copyData(latestBehavior.positives||[]);
+      nextBehavior.audit=copyData(latestBehavior.audit||[]);
+      nextBehavior.nextViolationId=Number(latestBehavior.nextViolationId)||1;
+      nextBehavior.nextPositiveId=Number(latestBehavior.nextPositiveId)||1;
+    });
+  });
+  return next;
+}
+
+function commitSharedStateMutation(transform){
+  const task=async()=>{
+    sharedMutationInFlight++;
+    try{
+      for(let attempt=0;attempt<6;attempt++){
+        const current=await readSharedState();
+        const next=transform(copyData(current.data),current);
+        if(!next)return current;
+        const previousTime=Date.parse(current.updated_at)||0;
+        const nextUpdatedAt=new Date(Math.max(Date.now(),previousTime+1)).toISOString();
+        const result=await window.neonClient.from('school_state').update({
+          data:next,updated_at:nextUpdatedAt,updated_by:user?.id||null
+        }).eq('singleton',true).eq('updated_at',current.updated_at).select('updated_at');
+        if(result.error)throw result.error;
+        const updated=sharedStateRow(result);
+        if(updated)return updated;
+      }
+      throw new Error('The shared record changed repeatedly. Please try again.');
+    }finally{sharedMutationInFlight--;}
+  };
+  sharedMutationChain=sharedMutationChain.then(task,task);
+  return sharedMutationChain;
+}
+
 async function persistState(snapshot){
   if(!window.neonClient||!user)return;
-  const {error}=await window.neonClient.from('school_state').update({
-    data:snapshot,
-    updated_at:new Date().toISOString(),
-    updated_by:user.id
-  }).eq('singleton',true);
-  if(error)throw error;
+  setLiveSaveStatus('saving');
+  await commitSharedStateMutation(latest=>preserveLiveRecordCollections(latest,copyData(snapshot)));
+  setLiveSaveStatus('saved');
 }
 function save(){
   if(!user||!window.neonClient)return;
@@ -1441,14 +1516,22 @@ function save(){
     syncActiveAcademicData();
     const snapshot=copyData(db);
     clearTimeout(saveTimer);
-    saveTimer=setTimeout(()=>persistState(snapshot).catch(()=>toast(LANG==='ar'?'تعذر حفظ التغييرات في قاعدة البيانات':'Could not save changes to the database')),350);
+    setLiveSaveStatus('saving');
+    saveTimer=setTimeout(()=>{
+      saveTimer=null;
+      persistState(snapshot).catch(()=>{
+        setLiveSaveStatus('error');
+        toast(LANG==='ar'?'تعذر حفظ التغييرات في قاعدة البيانات':'Could not save changes to the database');
+      });
+    },350);
   }catch(e){}
 }
 async function load(){
-  const stateResult=await window.neonClient.from('school_state').select('data').eq('singleton',true).limit(1);
+  const stateResult=await window.neonClient.from('school_state').select('data,updated_at,updated_by').eq('singleton',true).limit(1);
   if(stateResult.error)throw stateResult.error;
   const row=Array.isArray(stateResult.data)?stateResult.data[0]:stateResult.data;
   if(!row||!row.data)throw new Error('Attendance state is not initialized');
+  lastServerUpdatedAt=row.updated_at||'';
   db=row.data;
   if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
   if(db.permissions.manager&&!db.permissions.principal){db.permissions.principal=db.permissions.manager;delete db.permissions.manager;}
@@ -1476,6 +1559,52 @@ async function load(){
   }
   ensureAcademicModel();
   hydrateActiveAcademicData();
+}
+
+function applyRemoteAcademicState(remote){
+  if(!remote?.academicYears)return;
+  const localYear=db.activeAcademicYear;
+  const localSemester=String(db.activeSemester||'1');
+  const localProgram=db.activeProgram;
+  db.academicYears=copyData(remote.academicYears);
+  if(db.academicYears[localYear])db.activeAcademicYear=localYear;
+  if(['1','2'].includes(localSemester))db.activeSemester=localSemester;
+  if(allowedPrograms().includes(localProgram))db.activeProgram=localProgram;
+  ensureAcademicModel();
+  hydrateActiveAcademicData();
+  renderDashboard();
+  if(document.getElementById('page-attendance')?.classList.contains('active')){
+    const cls=document.getElementById('attClass')?.value;
+    const date=document.getElementById('attDate')?.value;
+    if(cls&&date)loadAttTable();
+  }
+  if(document.getElementById('page-reports')?.classList.contains('active'))window.refreshActiveAttendanceReport?.();
+  if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
+  window.refreshBehaviorContext?.();
+}
+
+async function pollSharedState(force=false){
+  if(!user||!window.neonClient||document.hidden||liveSyncInFlight||sharedMutationInFlight||saveTimer||attendancePatches.size)return;
+  liveSyncInFlight=true;
+  try{
+    const meta=await readSharedState('updated_at,updated_by');
+    if(!force&&meta.updated_at===lastServerUpdatedAt)return;
+    if(meta.updated_at===lastServerUpdatedAt)return;
+    const latest=await readSharedState();
+    lastServerUpdatedAt=latest.updated_at||'';
+    applyRemoteAcademicState(latest.data);
+    setLiveSaveStatus('saved');
+  }catch(e){}finally{liveSyncInFlight=false;}
+}
+
+function startLiveSync(){
+  clearInterval(liveSyncInterval);
+  liveSyncInterval=setInterval(()=>pollSharedState(false),2500);
+  if(!liveSyncEventsBound){
+    window.addEventListener('focus',()=>pollSharedState(true));
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollSharedState(true);});
+    liveSyncEventsBound=true;
+  }
 }
 function ensure(){ Object.values(db.classes||{}).forEach(normalizeClassScope);Object.keys(db.classes||{}).forEach(c=>{if(!db.attendance[c])db.attendance[c]={};}); }
 function rnd(){ return Math.random().toString(36).substr(2,9); }
@@ -1557,7 +1686,12 @@ async function doLogin(){
 }
 
 async function doLogout(){
-  try{if(user){syncActiveAcademicData();await persistState(copyData(db));}await window.neonClient.auth.signOut();}catch(e){}
+  try{
+    clearInterval(liveSyncInterval);
+    clearTimeout(attendanceFlushTimer);
+    if(user){await flushAttendancePatches();await sharedMutationChain;}
+    await window.neonClient.auth.signOut();
+  }catch(e){}
   localStorage.removeItem('najd_attendance_session');
   user=null;
   const chooser=document.getElementById('appChooser');if(chooser)chooser.style.display='none';
@@ -1613,8 +1747,8 @@ async function initApp(){
   renderStuTable();
   renderPerms();
   applyUserPermissions();
-  clearInterval(autosaveInterval);
-  autosaveInterval=setInterval(save,15000);
+  setLiveSaveStatus('saved');
+  startLiveSync();
 }
 
 function applySchoolBranding(){
@@ -1933,7 +2067,7 @@ function loadAttTable(){
           <button type="button" class="${absenceType==='excused'?'act':''}" onclick="setAbsenceType('${s.id}','excused',this)">✓ ${t('excusedAbsence')}</button>
           <button type="button" class="${absenceType==='unexcused'?'act':''}" onclick="setAbsenceType('${s.id}','unexcused',this)">! ${t('unexcusedAbsence')}</button>
         </div>
-        <input class="note-inp" value="${nt.replace(/"/g,'&quot;')}" placeholder="${LANG==='ar'?'ملاحظة...':'Note...'}" onchange="setNote('${s.id}',this.value)">
+        <input class="note-inp" value="${nt.replace(/"/g,'&quot;')}" placeholder="${LANG==='ar'?'ملاحظة...':'Note...'}" oninput="setNote('${s.id}',this.value)">
       </div>
     </div>`;
   }).join('');
@@ -1948,11 +2082,128 @@ function attendanceAttribution(){
   };
 }
 
+const attendancePatches=new Map();
+let attendanceFlushTimer=null;
+let attendanceFlushInFlight=false;
+
+function queueAttendancePatch(classId,date,studentId,record){
+  if(!user||!classId||!date||!studentId)return;
+  const notice=(db.notifications||[]).find(item=>item.studentId===studentId&&item.classId===classId&&item.date===date&&item.status==='pending');
+  const patch={
+    academicYear:db.activeAcademicYear,semester:String(db.activeSemester),classId,date,studentId,
+    record:copyData(record),notification:notice?copyData(notice):null
+  };
+  attendancePatches.set([patch.academicYear,patch.semester,classId,date,studentId].join('|'),patch);
+  setLiveSaveStatus('saving');
+  clearTimeout(attendanceFlushTimer);
+  attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),180);
+}
+
+function sharedSemester(state,academicYear,semester){
+  if(!state.academicYears)state.academicYears={};
+  if(!state.academicYears[academicYear])state.academicYears[academicYear]={name:academicYear,classes:{},students:{},semesters:{}};
+  const year=state.academicYears[academicYear];
+  if(!year.semesters)year.semesters={};
+  if(!year.semesters[semester])year.semesters[semester]={attendance:{},notifications:[],behavior:emptyBehaviorState()};
+  const sem=year.semesters[semester];
+  if(!sem.attendance)sem.attendance={};
+  if(!Array.isArray(sem.notifications))sem.notifications=[];
+  if(!sem.behavior)sem.behavior=emptyBehaviorState();
+  return sem;
+}
+
+function applyAttendancePatch(state,patch){
+  const sem=sharedSemester(state,patch.academicYear,patch.semester);
+  if(!sem.attendance[patch.classId])sem.attendance[patch.classId]={};
+  if(!sem.attendance[patch.classId][patch.date])sem.attendance[patch.classId][patch.date]={};
+  sem.attendance[patch.classId][patch.date][patch.studentId]=copyData(patch.record);
+  const sameNotice=item=>item.studentId===patch.studentId&&item.classId===patch.classId&&item.date===patch.date;
+  if(patch.record.status==='absent'){
+    if(!sem.notifications.some(sameNotice))sem.notifications.push(copyData(patch.notification||{
+      id:'n'+rnd(),studentId:patch.studentId,classId:patch.classId,date:patch.date,method:'SMS',status:'pending',sentAt:null
+    }));
+  }else{
+    sem.notifications=sem.notifications.filter(item=>!(sameNotice(item)&&item.status==='pending'));
+  }
+  if(state.activeAcademicYear===patch.academicYear&&String(state.activeSemester)===patch.semester){
+    state.attendance=copyData(sem.attendance);
+    state.notifications=copyData(sem.notifications);
+  }
+}
+
+async function flushAttendancePatches(){
+  clearTimeout(attendanceFlushTimer);attendanceFlushTimer=null;
+  if(attendanceFlushInFlight||!attendancePatches.size||!user)return;
+  attendanceFlushInFlight=true;
+  const batch=new Map(attendancePatches);
+  batch.forEach((value,key)=>{if(attendancePatches.get(key)===value)attendancePatches.delete(key);});
+  setLiveSaveStatus('saving');
+  try{
+    await commitSharedStateMutation(state=>{
+      batch.forEach(patch=>applyAttendancePatch(state,patch));
+      return state;
+    });
+    setLiveSaveStatus('saved');
+  }catch(e){
+    batch.forEach((patch,key)=>{if(!attendancePatches.has(key))attendancePatches.set(key,patch);});
+    setLiveSaveStatus('error');
+    toast(LANG==='ar'?'تعذر الحفظ المباشر — ستتم إعادة المحاولة تلقائياً':'Live save failed — retrying automatically');
+  }finally{
+    attendanceFlushInFlight=false;
+    if(attendancePatches.size)attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),900);
+  }
+}
+
+window.persistBehaviorRecord=function(kind,record,deleted=false,auditEntry=null,retry=0){
+  if(!user||!['violations','positives'].includes(kind)||!record?.id)return Promise.resolve();
+  const academicYear=db.activeAcademicYear;
+  const semester=String(db.activeSemester);
+  const storedRecord=copyData(record);
+  const storedAudit=auditEntry?copyData(auditEntry):null;
+  syncActiveAcademicData();
+  setLiveSaveStatus('saving');
+  return commitSharedStateMutation(state=>{
+    const behavior=sharedSemester(state,academicYear,semester).behavior;
+    const list=Array.isArray(behavior[kind])?behavior[kind]:[];
+    const index=list.findIndex(item=>item.id===storedRecord.id);
+    if(deleted){
+      behavior[kind]=list.filter(item=>item.id!==storedRecord.id);
+    }else if(index>=0){
+      list[index]=copyData(storedRecord);behavior[kind]=list;
+    }else{
+      behavior[kind]=[copyData(storedRecord),...list];
+    }
+    if(storedAudit){
+      behavior.audit=Array.isArray(behavior.audit)?behavior.audit:[];
+      if(!behavior.audit.some(item=>item.id===storedAudit.id))behavior.audit.unshift(copyData(storedAudit));
+      behavior.audit=behavior.audit.slice(0,300);
+    }
+    return state;
+  }).then(result=>{setLiveSaveStatus('saved');return result;}).catch(error=>{
+    setLiveSaveStatus('error');
+    if(retry<3){
+      setTimeout(()=>window.persistBehaviorRecord(kind,storedRecord,deleted,storedAudit,retry+1),900*(retry+1));
+      return;
+    }
+    toast(LANG==='ar'?'تعذر حفظ سجل السلوك في قاعدة البيانات':'Could not save the behavior record to the database');
+    return undefined;
+  });
+};
+
+function materializeAttendanceDay(classId,date){
+  ensureAttRec(classId,date);
+  visibleStudents().filter(student=>student.classId===classId).forEach(student=>{
+    if(db.attendance[classId][date][student.id])return;
+    db.attendance[classId][date][student.id]={status:'present',note:'',...attendanceAttribution()};
+    queueAttendancePatch(classId,date,student.id,db.attendance[classId][date][student.id]);
+  });
+}
+
 function setAtt(sid,status,btn){
   const cls=document.getElementById('attClass').value;
   const date=document.getElementById('attDate').value;
   if(!cls||!date){toast(t('selectRequired'));return;}
-  ensureAttRec(cls,date);
+  materializeAttendanceDay(cls,date);
   const prev=db.attendance[cls][date][sid];
   const note=prev?prev.note:'';
   const absenceFields=status==='absent'?{absenceType:prev?.status==='absent'?normalizedAbsenceType(prev):'excused'}:{};
@@ -1962,7 +2213,7 @@ function setAtt(sid,status,btn){
   } else {
     db.notifications=db.notifications.filter(n=>!(n.studentId===sid&&n.classId===cls&&n.date===date&&n.status==='pending'));
   }
-  save();
+  queueAttendancePatch(cls,date,sid,db.attendance[cls][date][sid]);
   const row=document.getElementById('ar-'+sid);
   if(row){
     row.className='att-row '+(status==='absent'?'r-absent':status==='tardy'?'r-tardy':status==='early'?'r-early':'r-present');
@@ -1986,7 +2237,7 @@ function setAbsenceType(sid,type,btn){
   const record=db.attendance[cls][date][sid];
   if(!record||record.status!=='absent')return;
   db.attendance[cls][date][sid]={...record,absenceType:type,...attendanceAttribution()};
-  save();
+  queueAttendancePatch(cls,date,sid,db.attendance[cls][date][sid]);
   btn.closest('.absence-type')?.querySelectorAll('button').forEach(button=>button.classList.toggle('act',button===btn));
   updAttCounters(cls,date);
 }
@@ -2006,10 +2257,10 @@ function setNote(sid,note){
   const cls=document.getElementById('attClass').value;
   const date=document.getElementById('attDate').value;
   if(!cls||!date)return;
-  ensureAttRec(cls,date);
+  materializeAttendanceDay(cls,date);
   if(!db.attendance[cls][date][sid])db.attendance[cls][date][sid]={status:'present',note,...attendanceAttribution()};
   else db.attendance[cls][date][sid]={...db.attendance[cls][date][sid],note,...attendanceAttribution()};
-  save();
+  queueAttendancePatch(cls,date,sid,db.attendance[cls][date][sid]);
 }
 
 function updAttCounters(cls,date){
@@ -2033,12 +2284,13 @@ function markAll(status){
     if(status==='absent')addNotif(s.id,cls,date);
     else db.notifications=db.notifications.filter(n=>!(n.studentId===s.id&&n.classId===cls&&n.date===date&&n.status==='pending'));
   });
-  save(); loadAttTable();
+  visibleStudents().filter(s=>s.classId===cls).forEach(s=>queueAttendancePatch(cls,date,s.id,db.attendance[cls][date][s.id]));
+  loadAttTable();
   const msgs={present:t('markAllPresent'),absent:t('markAllAbsent'),tardy:t('markAllTardy'),early:t('markAllEarly')};
   toast(msgs[status]||'✅');
 }
 
-function saveAttRecord(){
+async function saveAttRecord(){
   const cls=document.getElementById('attClass').value;
   const date=document.getElementById('attDate').value;
   if(!cls||!date){toast(t('selectRequired'));return;}
@@ -2048,8 +2300,9 @@ function saveAttRecord(){
     if(!record)db.attendance[cls][date][s.id]={status:'present',note:'',...attendanceAttribution()};
     else db.attendance[cls][date][s.id]={...record,...(record.status==='absent'?{absenceType:normalizedAbsenceType(record)}:{}),...attendanceAttribution()};
   });
-  save(); toast(t('recordSaved'));
-  setTimeout(()=>goToDashboard(), 800);
+  visibleStudents().filter(s=>s.classId===cls).forEach(s=>queueAttendancePatch(cls,date,s.id,db.attendance[cls][date][s.id]));
+  await flushAttendancePatches();
+  goToDashboard();
 }
 
 // ════════════════════════════════════════════
@@ -2497,6 +2750,7 @@ function renderTopRpt(){
 // ════════════════════════════════════════════
 function renderNotifTable(){
   const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
+  let addedMissingNotification=false;
   // Sync: create notifications for all absences not yet tracked
   Object.entries(db.attendance).forEach(([cls,byDate])=>{
     if(!visibleClassIds.has(cls))return;
@@ -2504,11 +2758,12 @@ function renderNotifTable(){
       Object.entries(byStu).forEach(([sid,rec])=>{
         if(rec.status==='absent'&&!db.notifications.find(n=>n.studentId===sid&&n.classId===cls&&n.date===date)){
           db.notifications.push({id:'n'+rnd(),studentId:sid,classId:cls,date,method:'SMS',status:'pending',sentAt:null});
+          addedMissingNotification=true;
         }
       });
     });
   });
-  save();
+  if(addedMissingNotification)save();
 
   const clsF=(document.getElementById('nfClsF')||{}).value||'';
   const dateF=(document.getElementById('nfDateF')||{}).value||'';

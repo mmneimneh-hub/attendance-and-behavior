@@ -205,11 +205,13 @@ function procedureLabel(level,key){
 }
 function addAudit(action,targetId,details){
   var st=bstate();
-  st.audit.unshift({
+  var entry={
     id:"audit-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),action:action,targetId:targetId,details:details||"",
     actorId:user&&user.id||"",actorName:user&&user.name||"",actorEmail:user&&user.email||"",at:new Date().toISOString()
-  });
+  };
+  st.audit.unshift(entry);
   st.audit=st.audit.slice(0,300);
+  return entry;
 }
 function nextId(kind){
   var st=bstate(),positive=kind==="positive",prop=positive?"nextPositiveId":"nextViolationId",prefix=positive?"PB-":"BH-";
@@ -605,8 +607,8 @@ window.saveViolationRecord=function(){
     status:document.getElementById("behViolationStatus").value,notes:document.getElementById("behViolationNotes").value.trim(),deduction:VIOLATIONS[level].deduction
   },recordMeta(existing));
   if(existing)Object.assign(existing,record);else st.violations.unshift(record);
-  addAudit(existing?"update-violation":"create-violation",record.id,studentDisplay(studentId));
-  save();toast(existing?tx("updated"):tx("saved"));resetViolationForm();renderBehaviorDashboard();renderBehaviorRecords();
+  var audit=addAudit(existing?"update-violation":"create-violation",record.id,studentDisplay(studentId));
+  window.persistBehaviorRecord("violations",record,false,audit);toast(existing?tx("updated"):tx("saved"));resetViolationForm();renderBehaviorDashboard();renderBehaviorRecords();
 };
 
 window.editViolationRecord=function(id){
@@ -629,7 +631,7 @@ window.editViolationRecord=function(id){
 window.deleteViolationRecord=function(id){
   if(!hasPermission("behavior_manage")||!confirm(tx("confirmDelete")))return;
   var st=bstate(),record=st.violations.find(function(r){return r.id===id;});if(!record||!allowedBehaviorRecord(record))return;
-  st.violations=st.violations.filter(function(r){return r.id!==id;});addAudit("delete-violation",id,studentDisplay(record.studentId,record.studentName));save();toast(tx("deleted"));renderBehaviorRecords();renderBehaviorDashboard();
+  st.violations=st.violations.filter(function(r){return r.id!==id;});var audit=addAudit("delete-violation",id,studentDisplay(record.studentId,record.studentName));window.persistBehaviorRecord("violations",record,true,audit);toast(tx("deleted"));renderBehaviorRecords();renderBehaviorDashboard();
 };
 
 function filteredViolationRecords(){
@@ -673,7 +675,7 @@ window.savePositiveRecord=function(){
     recommendation:document.getElementById("behPositiveRecommendation").value.trim()
   },recordMeta(existing));
   if(existing)Object.assign(existing,record);else st.positives.unshift(record);
-  addAudit(existing?"update-positive":"create-positive",record.id,studentDisplay(studentId));save();toast(existing?tx("updated"):tx("saved"));resetPositiveForm();renderPositiveReport();renderBehaviorDashboard();
+  var audit=addAudit(existing?"update-positive":"create-positive",record.id,studentDisplay(studentId));window.persistBehaviorRecord("positives",record,false,audit);toast(existing?tx("updated"):tx("saved"));resetPositiveForm();renderPositiveReport();renderBehaviorDashboard();
 };
 window.editPositiveRecord=function(id){
   if(!hasPermission("behavior_manage"))return;var r=bstate().positives.find(function(x){return x.id===id;});if(!r||!allowedBehaviorRecord(r))return;
@@ -687,7 +689,7 @@ window.editPositiveRecord=function(id){
 };
 window.deletePositiveRecord=function(id){
   if(!hasPermission("behavior_manage")||!confirm(tx("confirmDelete")))return;var st=bstate(),record=st.positives.find(function(r){return r.id===id;});if(!record||!allowedBehaviorRecord(record))return;
-  st.positives=st.positives.filter(function(r){return r.id!==id;});addAudit("delete-positive",id,studentDisplay(record.studentId,record.studentName));save();toast(tx("deleted"));renderPositiveReport();renderBehaviorDashboard();
+  st.positives=st.positives.filter(function(r){return r.id!==id;});var audit=addAudit("delete-positive",id,studentDisplay(record.studentId,record.studentName));window.persistBehaviorRecord("positives",record,true,audit);toast(tx("deleted"));renderPositiveReport();renderBehaviorDashboard();
 };
 
 function filteredPositiveRecords(){
