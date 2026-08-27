@@ -1508,6 +1508,7 @@ let behaviorFlushTimer=null;
 let behaviorFlushInFlight=false;
 let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
+let attendanceSaveRetryDelay=900;
 
 function sharedStateRow(result){
   return Array.isArray(result?.data)?result.data[0]:result?.data;
@@ -1527,7 +1528,7 @@ function setLiveSaveStatus(status){
   const values={
     saving:LANG==='ar'?'جارٍ الحفظ والمزامنة...':'Saving & syncing...',
     saved:LANG==='ar'?'محفوظ ومتزامن مباشرة':'Saved & live synced',
-    error:LANG==='ar'?'تعذر الحفظ — ستتم إعادة المحاولة':'Save failed — retrying'
+    error:LANG==='ar'?'تأخر الحفظ — ستتم إعادة المحاولة تلقائياً':'Save delayed — retrying automatically'
   };
   label.dataset.state=status;
   label.textContent=values[status]||values.saved;
@@ -1618,6 +1619,23 @@ function stateOperationsMatch(state,operations){
   });
 }
 
+function waitForSaveRetry(attempt){
+  const base=Math.min(45*(2**Math.min(attempt,5)),900);
+  return new Promise(resolve=>setTimeout(resolve,base+Math.floor(Math.random()*180)));
+}
+function retryableSharedStateError(error){
+  const status=Number(error?.status||error?.statusCode||0);
+  const code=String(error?.code||'').toUpperCase();
+  if([400,401,403,404,405,409,422].includes(status))return false;
+  if(code==='42501'||code.startsWith('23')||code.startsWith('42'))return false;
+  return true;
+}
+function delayedSaveError(message){
+  const error=new Error(message);
+  error.code='SAVE_BUSY';
+  return error;
+}
+
 function adoptConfirmedState(confirmed,updatedAt=''){
   if(!confirmed)return;
   const localOperations=collectStateOperations(lastConfirmedState||{},db||{});
@@ -1636,25 +1654,33 @@ function commitSharedStateMutation(transform,verify=null){
     sharedMutationInFlight++;
     refreshSaveIndicator();
     try{
-      for(let attempt=0;attempt<6;attempt++){
-        const current=await readSharedState();
-        const next=transform(copyData(current.data),current);
-        if(!next)return current;
-        const previousTime=Date.parse(current.updated_at)||0;
-        const nextUpdatedAt=new Date(Math.max(Date.now(),previousTime+1)).toISOString();
-        const result=await window.neonClient.from('school_state').update({
-          data:next,updated_at:nextUpdatedAt,updated_by:user?.id||null
-        }).eq('singleton',true).eq('updated_at',current.updated_at).select('data,updated_at,updated_by');
-        if(result.error)throw result.error;
-        const updated=sharedStateRow(result);
-        if(updated){
-          const confirmed=updated.data||next;
-          if(verify&&!verify(confirmed))throw new Error('The saved data could not be verified.');
-          adoptConfirmedState(confirmed,updated.updated_at||nextUpdatedAt);
-          return updated;
+      let lastError=null;
+      for(let attempt=0;attempt<12;attempt++){
+        try{
+          const current=await readSharedState();
+          const next=transform(copyData(current.data),current);
+          if(!next)return current;
+          const previousTime=Date.parse(current.updated_at)||0;
+          const nextUpdatedAt=new Date(Math.max(Date.now(),previousTime+1)).toISOString();
+          const result=await window.neonClient.from('school_state').update({
+            data:next,updated_at:nextUpdatedAt,updated_by:user?.id||null
+          }).eq('singleton',true).eq('updated_at',current.updated_at).select('data,updated_at,updated_by');
+          if(result.error)throw result.error;
+          const updated=sharedStateRow(result);
+          if(updated){
+            const confirmed=updated.data||next;
+            if(verify&&!verify(confirmed))throw delayedSaveError('The saved data could not be verified yet.');
+            adoptConfirmedState(confirmed,updated.updated_at||nextUpdatedAt);
+            return updated;
+          }
+          lastError=delayedSaveError('The shared record changed while saving.');
+        }catch(error){
+          lastError=error;
+          if(!retryableSharedStateError(error)||attempt===11)throw error;
         }
+        await waitForSaveRetry(attempt);
       }
-      throw new Error('The shared record changed repeatedly. Please try again.');
+      throw lastError||delayedSaveError('The shared record changed repeatedly.');
     }finally{sharedMutationInFlight--;refreshSaveIndicator();}
   };
   sharedMutationChain=sharedMutationChain.then(task,task);
@@ -2452,14 +2478,23 @@ async function flushAttendancePatches({throwOnError=false}={}){
   try{
     await attendanceFlushPromise;
     attendanceSaveError=null;
+    attendanceSaveRetryDelay=900;
   }catch(error){
     batch.forEach((patch,key)=>{if(!attendancePatches.has(key))attendancePatches.set(key,patch);});
     attendanceSaveError=error;
-    toast(LANG==='ar'?'تعذر الحفظ المباشر — ستتم إعادة المحاولة تلقائياً':'Live save failed — retrying automatically');
+    console.warn('Attendance save retry scheduled',{code:error?.code||'',status:error?.status||'',message:error?.message||''});
+    const delayed=error?.code==='SAVE_BUSY'||retryableSharedStateError(error);
+    toast(delayed
+      ?(LANG==='ar'?'تأخر الحفظ بسبب تزامن عدة مستخدمين — ستتم إعادة المحاولة تلقائياً':'Save delayed by concurrent updates — retrying automatically')
+      :(LANG==='ar'?'تعذر الحفظ المباشر — ستتم إعادة المحاولة تلقائياً':'Live save failed — retrying automatically'));
+    attendanceSaveRetryDelay=Math.min(Math.round(attendanceSaveRetryDelay*1.7),6000);
     if(throwOnError)throw error;
   }finally{
     attendanceFlushInFlight=false;
-    if(attendancePatches.size)attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),900);
+    if(attendancePatches.size){
+      const retryIn=attendanceSaveError?attendanceSaveRetryDelay+Math.floor(Math.random()*500):120;
+      attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),retryIn);
+    }
     refreshSaveIndicator();
   }
 }
