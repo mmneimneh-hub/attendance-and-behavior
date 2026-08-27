@@ -351,6 +351,15 @@ html[dir="rtl"] .mini-stat{border-left:none;border-right:1px solid var(--slate-1
   transition:border .2s}
 .sbar input{flex:1;min-width:160px}
 .sbar input:focus,.sbar select:focus{border-color:var(--brand)}
+.notification-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;align-items:end;margin-bottom:10px}
+.notification-filter{display:flex;flex-direction:column;gap:4px;min-width:0}
+.notification-filter>span{font-size:.72rem;font-weight:700;color:var(--slate-600)}
+.notification-filter input,.notification-filter select{width:100%;min-width:0;padding:8px 10px;border-radius:var(--radius);border:1.5px solid var(--slate-200);background:#fff;color:var(--slate-800);font:inherit;font-size:.8rem;outline:none}
+.notification-filter input:focus,.notification-filter select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(27,63,106,.09)}
+.notification-filter-search{grid-column:span 2}
+.notification-filter-actions{display:flex;align-items:flex-end}
+.notification-filter-actions .btn{width:100%;justify-content:center;min-height:39px}
+.notification-filter-summary{font-size:.75rem;font-weight:700;color:var(--slate-500);margin-bottom:10px}
 
 /* ══════════ ALERT ══════════ */
 .alert{padding:10px 14px;border-radius:var(--radius);font-size:.82rem;
@@ -517,6 +526,8 @@ html[dir="ltr"] .att-row.r-full{border-left-color:var(--purple)}
   .program-grade-grid{grid-template-columns:minmax(0,1fr)}
   .sbar{display:grid!important;grid-template-columns:minmax(0,1fr)!important}
   .sbar input,.sbar select,.sbar .btn{width:100%!important;min-width:0}
+  .notification-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .notification-filter-search{grid-column:1/-1}
   .att-hdr{display:none}
   .att-row{grid-template-columns:24px minmax(0,1fr);padding:10px 8px;gap:8px}
   .att-row .status-grp,.att-row .att-note-cell{grid-column:1/-1}
@@ -830,16 +841,18 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
           </div>
         </div>
         <div class="cb" style="padding-bottom:0">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-            <select id="nfClsF" onchange="renderNotifTable()" style="padding:8px 12px;border-radius:var(--radius);border:1.5px solid var(--slate-200);font-family:inherit;font-size:.84rem;outline:none"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select>
-            <input type="date" id="nfDateF" onchange="renderNotifTable()" style="padding:8px 12px;border-radius:var(--radius);border:1.5px solid var(--slate-200);font-family:inherit;font-size:.84rem;outline:none">
-            <select id="nfStatusF" onchange="renderNotifTable()" style="padding:8px 12px;border-radius:var(--radius);border:1.5px solid var(--slate-200);font-family:inherit;font-size:.84rem;outline:none">
-              <option value="" data-ar="كل الحالات" data-en="All Statuses">كل الحالات</option>
-              <option value="pending" data-ar="معلّق" data-en="Pending">⏳ معلّق</option>
-              <option value="sent" data-ar="مُرسَل" data-en="Sent">✅ مُرسَل</option>
-            </select>
-            <button class="btn btn-gr btn-sm" onclick="resetNotifFilters()">↺</button>
+          <div class="notification-filters" aria-label="Notification filters">
+            <label class="notification-filter notification-filter-search"><span data-ar="بحث" data-en="Search">بحث</span><input type="search" id="nfSearchF" oninput="renderNotifTable()" data-placeholder-ar="اسم الطالب أو ولي الأمر أو الجوال" data-placeholder-en="Student, guardian, or mobile" placeholder="اسم الطالب أو ولي الأمر أو الجوال"></label>
+            <label class="notification-filter"><span data-ar="الصف" data-en="Grade">الصف</span><select id="nfGradeF" onchange="refreshNotificationScopeFilters()"><option value="">كل الصفوف</option></select></label>
+            <label class="notification-filter"><span data-ar="الفصل" data-en="Class">الفصل</span><select id="nfClsF" onchange="renderNotifTable()"><option value="">كل الفصول</option></select></label>
+            <label class="notification-filter"><span data-ar="التاريخ" data-en="Date">التاريخ</span><input type="date" id="nfDateF" onchange="renderNotifTable()"></label>
+            <label class="notification-filter"><span data-ar="نوع الغياب" data-en="Absence Type">نوع الغياب</span><select id="nfAbsenceF" onchange="renderNotifTable()"><option value="" data-ar="كل أنواع الغياب" data-en="All Absence Types">كل أنواع الغياب</option><option value="excused" data-ar="بعذر" data-en="Excused">بعذر</option><option value="unexcused" data-ar="بدون عذر" data-en="Unexcused">بدون عذر</option></select></label>
+            <label class="notification-filter"><span data-ar="وسيلة الإرسال" data-en="Send Via">وسيلة الإرسال</span><select id="nfMethodF" onchange="renderNotifTable()"><option value="" data-ar="كل الوسائل" data-en="All Methods">كل الوسائل</option><option value="WhatsApp">WhatsApp</option><option value="SMS">SMS</option><option value="Email">Email</option></select></label>
+            <label class="notification-filter"><span data-ar="حالة الإرسال" data-en="Delivery Status">حالة الإرسال</span><select id="nfStatusF" onchange="renderNotifTable()"><option value="" data-ar="كل الحالات" data-en="All Statuses">كل الحالات</option><option value="pending" data-ar="معلّق" data-en="Pending">معلّق</option><option value="sent" data-ar="مُرسَل" data-en="Sent">مُرسَل</option><option value="failed" data-ar="فشل" data-en="Failed">فشل</option></select></label>
+            <label class="notification-filter"><span data-ar="رقم واتساب" data-en="WhatsApp Number">رقم واتساب</span><select id="nfContactF" onchange="renderNotifTable()"><option value="" data-ar="كل الأرقام" data-en="All Numbers">كل الأرقام</option><option value="ready" data-ar="رقم صالح" data-en="Valid Number">رقم صالح</option><option value="missing" data-ar="مفقود أو غير صالح" data-en="Missing or Invalid">مفقود أو غير صالح</option></select></label>
+            <div class="notification-filter-actions"><button class="btn btn-gr btn-sm" onclick="resetNotifFilters()">↺ <span data-ar="إعادة ضبط" data-en="Reset">إعادة ضبط</span></button></div>
           </div>
+          <div class="notification-filter-summary" id="nfFilterSummary" aria-live="polite"></div>
           <div class="alert alert-i" style="margin-bottom:12px">💡 <span data-ar="واتساب هو وسيلة الإرسال الافتراضية. تفتح الرسالة جاهزة في واتساب على هذا الجهاز، ثم يضغط المستخدم إرسال. تُرسل رسائل البرنامج الأهلي بالعربية والدولي بالإنجليزية." data-en="WhatsApp is the default channel. The prepared message opens in WhatsApp on this device for the user to send. National messages are in Arabic and International messages are in English.">واتساب هو وسيلة الإرسال الافتراضية. تفتح الرسالة جاهزة في واتساب على هذا الجهاز، ثم يضغط المستخدم إرسال. تُرسل رسائل البرنامج الأهلي بالعربية والدولي بالإنجليزية.</span></div>
         </div>
         <div class="tw"><table>
@@ -1214,6 +1227,9 @@ function applyLang(){
     const txt = el.getAttribute(isAr?'data-ar':'data-en');
     if(txt) el.textContent = txt;
   });
+  document.querySelectorAll('[data-placeholder-ar]').forEach(el=>{
+    el.placeholder=el.getAttribute(isAr?'data-placeholder-ar':'data-placeholder-en')||'';
+  });
   // Update specific IDs
   const lmap = {
     loginTitle: {ar:'منصة نجد المدرسية', en:'Najd Schools Platform'},
@@ -1233,6 +1249,7 @@ function applyLang(){
   localStorage.setItem('lang', LANG);
   if(typeof db!=='undefined'&&db&&db.academicYears) renderAcademicControls();
   window.applyBehaviorLanguage?.();
+  if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
 }
 
 function toggleLang(){
@@ -1986,9 +2003,7 @@ function fillSelects(){
   document.getElementById('rDayD').value=today();
   document.getElementById('rFrom').value=today().slice(0,8)+'01';
   document.getElementById('rTo').value=today();
-  // Notif class filter
-  const nf=document.getElementById('nfClsF');
-  if(nf)nf.innerHTML=`<option value="">${LANG==='ar'?'كل الفصول':'All Classes'}</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
+  refreshNotificationScopeFilters(false);
   window.refreshAttendanceReportFilters?.({render:false});
 }
 
@@ -2943,10 +2958,60 @@ function renderTopRpt(){
 // ════════════════════════════════════════════
 // NOTIFICATIONS — FIXED: reads live from db.students
 // ════════════════════════════════════════════
+function refreshNotificationScopeFilters(render=true){
+  const gradeEl=document.getElementById('nfGradeF');
+  const classEl=document.getElementById('nfClsF');
+  if(!gradeEl||!classEl)return;
+  const classes=visibleClasses();
+  const grades=[...new Set(classes.map(classGrade).filter(Boolean))].sort((a,b)=>Number(a)-Number(b));
+  const selectedGrade=grades.includes(gradeEl.value)?gradeEl.value:'';
+  gradeEl.innerHTML=`<option value="">${LANG==='ar'?'كل الصفوف':'All Grades'}</option>`+grades.map(grade=>`<option value="${grade}">${LANG==='ar'?'الصف':'Grade'} ${grade}</option>`).join('');
+  gradeEl.value=selectedGrade;
+  const filteredClasses=classes.filter(cls=>!selectedGrade||classGrade(cls)===selectedGrade);
+  const selectedClass=filteredClasses.some(cls=>cls.id===classEl.value)?classEl.value:'';
+  classEl.innerHTML=`<option value="">${LANG==='ar'?'كل الفصول':'All Classes'}</option>`+filteredClasses.map(cls=>`<option value="${cls.id}">${className(cls)} · ${LANG==='ar'?'الصف':'Grade'} ${classGrade(cls)}</option>`).join('');
+  classEl.value=selectedClass;
+  if(render)renderNotifTable();
+}
+
+function notificationFilterValues(){
+  return{
+    search:(document.getElementById('nfSearchF')?.value||'').trim().toLocaleLowerCase(),
+    grade:document.getElementById('nfGradeF')?.value||'',
+    classId:document.getElementById('nfClsF')?.value||'',
+    date:document.getElementById('nfDateF')?.value||'',
+    absenceType:document.getElementById('nfAbsenceF')?.value||'',
+    method:document.getElementById('nfMethodF')?.value||'',
+    status:document.getElementById('nfStatusF')?.value||'',
+    contact:document.getElementById('nfContactF')?.value||''
+  };
+}
+
+function notificationMatchesFilters(item,filters,visibleClassIds){
+  if(!visibleClassIds.has(item.classId))return false;
+  const cls=db.classes?.[item.classId];
+  const student=db.students?.[item.studentId];
+  const phone=student?.parentPhone||'';
+  const hasWhatsApp=!!normalizeWhatsAppPhone(phone);
+  if(filters.grade&&classGrade(cls)!==filters.grade)return false;
+  if(filters.classId&&item.classId!==filters.classId)return false;
+  if(filters.date&&item.date!==filters.date)return false;
+  if(filters.absenceType&&normalizedAbsenceType(notificationAttendanceRecord(item))!==filters.absenceType)return false;
+  if(filters.method&&(item.method||'WhatsApp')!==filters.method)return false;
+  if(filters.status&&item.status!==filters.status)return false;
+  if(filters.contact==='ready'&&!hasWhatsApp)return false;
+  if(filters.contact==='missing'&&hasWhatsApp)return false;
+  if(filters.search){
+    const haystack=[student?.name,student?.parent,phone,student?.parentEmail,className(cls),item.date].filter(Boolean).join(' ').toLocaleLowerCase();
+    if(!haystack.includes(filters.search))return false;
+  }
+  return true;
+}
+
 function notificationCardItems(){
   const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
-  const classId=document.getElementById('nfClsF')?.value||'',date=document.getElementById('nfDateF')?.value||'',status=document.getElementById('nfStatusF')?.value||'';
-  return(db.notifications||[]).filter(item=>visibleClassIds.has(item.classId)&&(!classId||item.classId===classId)&&(!date||item.date===date)&&(!status||item.status===status)).slice().reverse();
+  const filters=notificationFilterValues();
+  return(db.notifications||[]).filter(item=>notificationMatchesFilters(item,filters,visibleClassIds)).slice().reverse();
 }
 function openNotificationCard(type){
   if(!hasPermission('notifications'))return;
@@ -2956,6 +3021,7 @@ function openNotificationCard(type){
 }
 window.openNotificationCard=openNotificationCard;
 function renderNotifTable(){
+  refreshNotificationScopeFilters(false);
   const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
   let addedMissingNotification=false;
   // Sync: create notifications for all absences not yet tracked
@@ -2972,21 +3038,15 @@ function renderNotifTable(){
   });
   if(addedMissingNotification)save();
 
-  const clsF=(document.getElementById('nfClsF')||{}).value||'';
-  const dateF=(document.getElementById('nfDateF')||{}).value||'';
-  const statusF=(document.getElementById('nfStatusF')||{}).value||'';
-
-  const scopedNotifications=(db.notifications||[]).filter(n=>visibleClassIds.has(n.classId));
-  let notifs=scopedNotifications.filter(n=>{
-    if(clsF&&n.classId!==clsF)return false;
-    if(dateF&&n.date!==dateF)return false;
-    if(statusF&&n.status!==statusF)return false;
-    return true;
-  }).slice().reverse();
+  const filters=notificationFilterValues();
+  const notifs=(db.notifications||[]).filter(item=>notificationMatchesFilters(item,filters,visibleClassIds)).slice().reverse();
+  const activeFilterCount=Object.values(filters).filter(Boolean).length;
 
   const total=notifs.length;
   const pending=notifs.filter(n=>n.status==='pending').length;
   const sent=notifs.filter(n=>n.status==='sent').length;
+  const summary=document.getElementById('nfFilterSummary');
+  if(summary)summary.textContent=LANG==='ar'?`${total} نتيجة${activeFilterCount?` · ${activeFilterCount} فلتر نشط`:''}`:`${total} result${total===1?'':'s'}${activeFilterCount?` · ${activeFilterCount} active filter${activeFilterCount===1?'':'s'}`:''}`;
 
   const statsEl=document.getElementById('notifStats');
   if(statsEl) statsEl.innerHTML=`
@@ -2995,7 +3055,7 @@ function renderNotifTable(){
     ${dashboardCard('sent','g','✅',sent,LANG==='ar'?'تم الإرسال':'Sent','openNotificationCard')}`;
 
   if(!notifs.length){
-    document.getElementById('notifTbody').innerHTML=`<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--slate-400)">${total===0?t('noAbsences'):(LANG==='ar'?'لا نتائج للفلتر المحدد':'No results for selected filter')}</td></tr>`;
+    document.getElementById('notifTbody').innerHTML=`<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--slate-400)">${activeFilterCount?(LANG==='ar'?'لا نتائج للفلتر المحدد':'No results for the selected filters'):t('noAbsences')}</td></tr>`;
     return;
   }
 
@@ -3006,17 +3066,17 @@ function renderNotifTable(){
     const phone = stu ? (stu.parentPhone||'') : '';
     const email = stu ? (stu.parentEmail||'') : '';
     const parent = stu ? (stu.parent||'') : '';
-    const hasContact = !!(phone||email);
+    const hasWhatsApp = !!normalizeWhatsAppPhone(phone);
     const sc=n.status==='sent'?'ns-s':n.status==='failed'?'ns-f':'ns-p';
     const sl=n.status==='sent'?(LANG==='ar'?'✅ تم الإرسال':'✅ Sent'):n.status==='failed'?(LANG==='ar'?'❌ فشل':'❌ Failed'):(LANG==='ar'?'⏳ معلّق':'⏳ Pending');
-    const noContactWarning = !hasContact ? `<span style="font-size:.72rem;color:var(--warning)">⚠️ ${LANG==='ar'?'أضف من إدارة الطلاب':'Add from Students'}</span>` : '';
-    return`<tr style="${!hasContact?'background:var(--warning-bg)':''}">
+    const noContactWarning = !hasWhatsApp ? `<span style="font-size:.72rem;color:var(--warning)">⚠️ ${LANG==='ar'?'أضف رقم واتساب صالح':'Add a valid WhatsApp number'}</span>` : '';
+    return`<tr style="${!hasWhatsApp?'background:var(--warning-bg)':''}">
       <td style="color:var(--slate-400);font-size:.77rem">${i+1}</td>
       <td style="font-weight:700">${stu?stu.name:'—'}</td>
       <td><span class="badge bg-b">${cls?className(cls):n.classId}</span></td>
       <td style="font-size:.79rem">${n.date}</td>
       <td style="font-size:.81rem">${parent||`<span style="color:var(--warning)">—</span>`}</td>
-      <td style="font-size:.8rem">${phone||noContactWarning}</td>
+      <td style="font-size:.8rem">${phone||''}${phone&&!hasWhatsApp?'<br>':''}${noContactWarning}</td>
       <td style="font-size:.78rem">${email||'—'}</td>
       <td>
         ${n.status==='pending'?`<select onchange="changeMethod('${n.id}',this.value)" style="padding:4px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--slate-200);font-family:inherit;font-size:.76rem;outline:none">
@@ -3115,7 +3175,8 @@ function clearSentNotifs(){
 }
 
 function resetNotifFilters(){
-  ['nfClsF','nfDateF','nfStatusF'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['nfSearchF','nfGradeF','nfClsF','nfDateF','nfAbsenceF','nfMethodF','nfStatusF','nfContactF'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  refreshNotificationScopeFilters(false);
   renderNotifTable();
 }
 
