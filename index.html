@@ -826,8 +826,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         <div class="ch">
           <h3>🔔 <span data-ar="سجل الغيابات والإشعارات" data-en="Absences & Notifications">سجل الغيابات والإشعارات</span></h3>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-g btn-sm" onclick="sendAllPending()">📤 <span data-ar="إرسال الكل المعلّق" data-en="Send All Pending">إرسال الكل المعلّق</span></button>
-            <button class="btn btn-gr btn-sm" onclick="clearSentNotifs()">🗑️ <span data-ar="مسح المُرسَلة" data-en="Clear Sent">مسح المُرسَلة</span></button>
+            <button class="btn btn-g btn-sm" onclick="sendAllPending()">💬 <span data-ar="فتح الإشعار التالي في واتساب" data-en="Open Next in WhatsApp">فتح الإشعار التالي في واتساب</span></button>
           </div>
         </div>
         <div class="cb" style="padding-bottom:0">
@@ -841,7 +840,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
             </select>
             <button class="btn btn-gr btn-sm" onclick="resetNotifFilters()">↺</button>
           </div>
-          <div class="alert alert-i" style="margin-bottom:12px">💡 <span data-ar="يظهر هنا كل الطلاب الغائبين. إذا لم تظهر بيانات ولي الأمر، أضفها من إدارة الطلاب أولاً." data-en="All absent students appear here. If guardian info is missing, add it from Student Management first.">يظهر هنا كل الطلاب الغائبين. إذا لم تظهر بيانات ولي الأمر، أضفها من إدارة الطلاب أولاً.</span></div>
+          <div class="alert alert-i" style="margin-bottom:12px">💡 <span data-ar="واتساب هو وسيلة الإرسال الافتراضية. تفتح الرسالة جاهزة في واتساب على هذا الجهاز، ثم يضغط المستخدم إرسال. تُرسل رسائل البرنامج الأهلي بالعربية والدولي بالإنجليزية." data-en="WhatsApp is the default channel. The prepared message opens in WhatsApp on this device for the user to send. National messages are in Arabic and International messages are in English.">واتساب هو وسيلة الإرسال الافتراضية. تفتح الرسالة جاهزة في واتساب على هذا الجهاز، ثم يضغط المستخدم إرسال. تُرسل رسائل البرنامج الأهلي بالعربية والدولي بالإنجليزية.</span></div>
         </div>
         <div class="tw"><table>
           <thead><tr>
@@ -1399,11 +1398,24 @@ function normalizeDailyNotifications(notifications){
   const daily=new Map();
   (notifications||[]).forEach(notification=>{
     const item={...notification};delete item.period;
+    if(!item.method)item.method='WhatsApp';
     const key=`${item.classId}|${item.date}|${item.studentId}`;
     const previous=daily.get(key);
     if(!previous||item.status==='sent'&&previous.status!=='sent')daily.set(key,item);
   });
   return[...daily.values()];
+}
+function applyWhatsAppNotificationDefault(){
+  let changed=false;
+  Object.values(db.academicYears||{}).forEach(year=>Object.values(year.semesters||{}).forEach(semester=>{
+    (semester.notifications||[]).forEach(notification=>{
+      if(notification.status==='pending'&&(!notification.method||notification.method==='SMS')){notification.method='WhatsApp';changed=true;}
+    });
+  }));
+  (db.notifications||[]).forEach(notification=>{
+    if(notification.status==='pending'&&(!notification.method||notification.method==='SMS')){notification.method='WhatsApp';changed=true;}
+  });
+  return changed;
 }
 function ensureAcademicModel(){
   if(!db.activeAcademicYear)db.activeAcademicYear=DEFAULT_ACADEMIC_YEAR;
@@ -1595,6 +1607,7 @@ async function load(){
   }
   ensureAcademicModel();
   hydrateActiveAcademicData();
+  if(applyWhatsAppNotificationDefault())save();
 }
 
 function applyRemoteAcademicState(remote){
@@ -1608,6 +1621,7 @@ function applyRemoteAcademicState(remote){
   if(allowedPrograms().includes(localProgram))db.activeProgram=localProgram;
   ensureAcademicModel();
   hydrateActiveAcademicData();
+  if(applyWhatsAppNotificationDefault())save();
   renderDashboard();
   if(document.getElementById('page-attendance')?.classList.contains('active')){
     const cls=document.getElementById('attClass')?.value;
@@ -2174,7 +2188,7 @@ function applyAttendancePatch(state,patch){
   const sameNotice=item=>item.studentId===patch.studentId&&item.classId===patch.classId&&item.date===patch.date;
   if(patch.record.status==='absent'){
     if(!sem.notifications.some(sameNotice))sem.notifications.push(copyData(patch.notification||{
-      id:'n'+rnd(),studentId:patch.studentId,classId:patch.classId,date:patch.date,method:'SMS',status:'pending',sentAt:null
+      id:'n'+rnd(),studentId:patch.studentId,classId:patch.classId,date:patch.date,method:'WhatsApp',status:'pending',sentAt:null
     }));
   }else{
     sem.notifications=sem.notifications.filter(item=>!(sameNotice(item)&&item.status==='pending'));
@@ -2298,7 +2312,7 @@ function setAbsenceType(sid,type,btn){
 
 function addNotif(sid,cls,date){
   if(!db.notifications.find(n=>n.studentId===sid&&n.classId===cls&&n.date===date)){
-    db.notifications.push({id:'n'+rnd(),studentId:sid,classId:cls,date,method:'SMS',status:'pending',sentAt:null});
+    db.notifications.push({id:'n'+rnd(),studentId:sid,classId:cls,date,method:'WhatsApp',status:'pending',sentAt:null});
   }
 }
 
@@ -2950,7 +2964,7 @@ function renderNotifTable(){
     Object.entries(byDate).forEach(([date,byStu])=>{
       Object.entries(byStu).forEach(([sid,rec])=>{
         if(rec.status==='absent'&&!db.notifications.find(n=>n.studentId===sid&&n.classId===cls&&n.date===date)){
-          db.notifications.push({id:'n'+rnd(),studentId:sid,classId:cls,date,method:'SMS',status:'pending',sentAt:null});
+          db.notifications.push({id:'n'+rnd(),studentId:sid,classId:cls,date,method:'WhatsApp',status:'pending',sentAt:null});
           addedMissingNotification=true;
         }
       });
@@ -3006,8 +3020,8 @@ function renderNotifTable(){
       <td style="font-size:.78rem">${email||'—'}</td>
       <td>
         ${n.status==='pending'?`<select onchange="changeMethod('${n.id}',this.value)" style="padding:4px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--slate-200);font-family:inherit;font-size:.76rem;outline:none">
-          <option value="SMS" ${n.method==='SMS'?'selected':''}>📱 SMS</option>
           <option value="WhatsApp" ${n.method==='WhatsApp'?'selected':''}>💬 WhatsApp</option>
+          <option value="SMS" ${n.method==='SMS'?'selected':''}>📱 SMS</option>
           <option value="Email" ${n.method==='Email'?'selected':''}>📧 Email</option>
         </select>`:`<span style="font-size:.79rem">${n.method==='SMS'?'📱 SMS':n.method==='WhatsApp'?'💬 WhatsApp':'📧 Email'}</span>`}
       </td>
@@ -3024,27 +3038,73 @@ function renderNotifTable(){
 
 function changeMethod(id,method){const n=db.notifications.find(x=>x.id===id);if(n){n.method=method;save();}}
 
+function normalizeWhatsAppPhone(value){
+  let digits=String(value||'').replace(/\D/g,'');
+  if(digits.startsWith('00'))digits=digits.slice(2);
+  if(digits.startsWith('9660'))digits=`966${digits.slice(4)}`;
+  else if(digits.startsWith('0'))digits=`966${digits.slice(1)}`;
+  else if(digits.length===9&&digits.startsWith('5'))digits=`966${digits}`;
+  return /^\d{8,15}$/.test(digits)?digits:'';
+}
+
+function notificationAttendanceRecord(notification){
+  return db.attendance?.[notification.classId]?.[notification.date]?.[notification.studentId]||null;
+}
+
+function notificationMessage(notification){
+  const student=db.students?.[notification.studentId];
+  const cls=db.classes?.[notification.classId];
+  const international=normalizeClassScope(cls||{}).program==='international';
+  const record=notificationAttendanceRecord(notification);
+  const absenceType=normalizedAbsenceType(record);
+  const dateValue=new Date(`${notification.date}T12:00:00`);
+  const date=Number.isNaN(dateValue.getTime())?notification.date:dateValue.toLocaleDateString(international?'en-GB':'ar-SA-u-ca-gregory',{day:'numeric',month:'long',year:'numeric'});
+  const studentName=student?.name||'—';
+  if(international){
+    const status=absenceType==='unexcused'?'Unexcused':'Excused';
+    return `Dear Parent/Guardian of ${studentName},\n\nThis is to inform you that ${studentName} was recorded absent on ${date} in ${className(cls,'en')}.\nAbsence status: ${status}.\nAcademic year: ${db.activeAcademicYear} · Semester ${db.activeSemester}.\n\nNajd National Schools`;
+  }
+  const status=absenceType==='unexcused'?'بدون عذر':'بعذر';
+  return `السلام عليكم،\nولي أمر الطالب/ة ${studentName} المحترم،\n\nنحيطكم علمًا بأنه تم تسجيل غياب الطالب/ة بتاريخ ${date} في فصل ${className(cls,'ar')}.\nحالة الغياب: ${status}.\nالسنة الدراسية: ${db.activeAcademicYear} · الفصل الدراسي ${db.activeSemester}.\n\nمدارس نجد الأهلية`;
+}
+
+function openWhatsAppNotification(notification,phone){
+  const normalizedPhone=normalizeWhatsAppPhone(phone);
+  if(!normalizedPhone){
+    toast(LANG==='ar'?'رقم جوال ولي الأمر غير صالح لواتساب. استخدم الرقم بصيغة دولية.':'The guardian mobile number is not valid for WhatsApp. Use an international-format number.');
+    return false;
+  }
+  const opened=window.open(`https://wa.me/${normalizedPhone}?text=${encodeURIComponent(notificationMessage(notification))}`,'_blank');
+  if(!opened){
+    toast(LANG==='ar'?'تعذر فتح واتساب. اسمح بالنوافذ المنبثقة لهذا الموقع ثم حاول مرة أخرى.':'WhatsApp could not be opened. Allow pop-ups for this site and try again.');
+    return false;
+  }
+  try{opened.opener=null;}catch(e){}
+  return true;
+}
+
 function sendNotif(id){
   const n=db.notifications.find(x=>x.id===id); if(!n)return;
   if(!visibleClasses().some(c=>c.id===n.classId))return;
   const stu=db.students[n.studentId];
   const phone=stu?stu.parentPhone||'':'';
   const email=stu?stu.parentEmail||'':'';
+  if(n.method==='WhatsApp'&&!openWhatsAppNotification(n,phone))return;
+  if(n.method==='SMS'&&!phone){toast(t('noContact'));return;}
+  if(n.method==='Email'&&!email){toast(t('noContact'));return;}
   n.status='sent'; n.sentAt=new Date().toLocaleTimeString(LANG==='ar'?'ar-SA':'en-US');
   save(); renderNotifTable();
-  const hasContact=!!(phone||email);
-  if(!hasContact){toast(t('noContact'));return;}
-  const msg=n.method==='SMS'?`${t('smsSent')} ${phone}`:n.method==='WhatsApp'?`${t('waSent')} ${phone}`:`${t('emailSent')} ${email}`;
+  const msg=n.method==='SMS'?`${t('smsSent')} ${phone}`:n.method==='WhatsApp'?(LANG==='ar'?'💬 تم فتح الرسالة في واتساب لإرسالها':'💬 Message opened in WhatsApp for sending'):`${t('emailSent')} ${email}`;
   toast(msg);
 }
 
 function deleteNotif(id){const target=db.notifications.find(n=>n.id===id);if(!target||!visibleClasses().some(c=>c.id===target.classId))return;db.notifications=db.notifications.filter(n=>n.id!==id);save();renderNotifTable();}
 
 function sendAllPending(){
-  let cnt=0;
-  const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
-  (db.notifications||[]).filter(n=>n.status==='pending'&&visibleClassIds.has(n.classId)).forEach(n=>{n.status='sent';n.sentAt=new Date().toLocaleTimeString(LANG==='ar'?'ar-SA':'en-US');cnt++;});
-  save();renderNotifTable();toast(`${t('sendAll')} (${cnt})`);
+  const next=notificationCardItems().find(n=>n.status==='pending');
+  if(!next){toast(LANG==='ar'?'لا توجد إشعارات معلّقة':'There are no pending notifications');return;}
+  if(next.method!=='WhatsApp'){next.method='WhatsApp';save();}
+  sendNotif(next.id);
 }
 
 function clearSentNotifs(){
