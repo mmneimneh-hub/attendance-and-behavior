@@ -86,10 +86,15 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   student_id uuid NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   attendance_date date NOT NULL,
   status text NOT NULL CHECK (status IN ('present', 'absent', 'tardy', 'early')),
+  absence_type text,
   note text,
   recorded_by text REFERENCES staff_profiles(user_id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT attendance_absence_type_consistency CHECK (
+    (status = 'absent' AND absence_type IS NOT NULL AND absence_type IN ('excused', 'unexcused'))
+    OR (status <> 'absent' AND absence_type IS NULL)
+  ),
   UNIQUE (semester_id, student_id, attendance_date)
 );
 

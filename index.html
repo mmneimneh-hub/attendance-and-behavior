@@ -231,10 +231,10 @@ tbody tr:hover td{background:var(--slate-50)}
 
 /* ══════════ ATTENDANCE STATUS ══════════ */
 .att-wrap{border:1px solid var(--slate-200);border-radius:var(--radius-lg);overflow:hidden}
-.att-hdr{display:grid;grid-template-columns:36px 1.2fr 1fr 140px;gap:10px;
+.att-hdr{display:grid;grid-template-columns:36px 1.1fr 1.25fr minmax(190px,.8fr);gap:10px;
   padding:9px 16px;background:var(--slate-50);border-bottom:1.5px solid var(--slate-200);
   font-size:.74rem;font-weight:700;color:var(--slate-400)}
-.att-row{display:grid;grid-template-columns:36px 1.2fr 1fr 140px;gap:10px;
+.att-row{display:grid;grid-template-columns:36px 1.1fr 1.25fr minmax(190px,.8fr);gap:10px;
   align-items:center;padding:10px 16px;border-bottom:1px solid var(--slate-100);
   transition:background .12s}
 .att-row:last-child{border:none}
@@ -277,6 +277,15 @@ tbody tr:hover td{background:var(--slate-50)}
   transition:border .2s;background:var(--slate-50);color:var(--slate-700)}
 .note-inp:focus{border-color:var(--brand);background:white;
   box-shadow:0 0 0 2px var(--brand-light)}
+.att-note-cell{display:grid;gap:6px}
+.absence-type{display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.absence-type.show{display:grid}
+.absence-type button{padding:5px 6px;border:1px solid var(--danger-border);border-radius:var(--radius-sm);background:white;color:var(--danger);font-family:inherit;font-size:.69rem;font-weight:700;cursor:pointer}
+.absence-type button:hover{background:var(--danger-bg)}
+.absence-type button.act{background:var(--danger);border-color:var(--danger);color:white}
+.absence-type button:first-child{border-color:var(--warning-border);color:var(--warning)}
+.absence-type button:first-child:hover{background:var(--warning-bg)}
+.absence-type button:first-child.act{background:var(--warning);border-color:var(--warning);color:white}
 
 /* Mini stats bar */
 .mini-bar{display:flex;border-bottom:1px solid var(--slate-100)}
@@ -452,7 +461,7 @@ html[dir="ltr"] .att-row.r-full{border-left-color:var(--purple)}
   html[dir="ltr"] .sidebar{transform:translateX(-100%)}
   .sidebar.open{transform:translateX(0)}
   html[dir="ltr"] .sidebar.open{transform:translateX(0)}
-  .main{margin-right:0!important;padding:12px}
+  .main{margin-right:0!important;margin-left:0!important;padding:12px}
   .dashboard-grid{grid-template-columns:minmax(0,1fr)!important}
   .sg{grid-template-columns:1fr 1fr}
   .att-hdr,.att-row{grid-template-columns:30px 1fr;grid-template-rows:auto auto auto}
@@ -488,7 +497,7 @@ html[dir="ltr"] .att-row.r-full{border-left-color:var(--purple)}
   .sbar input,.sbar select,.sbar .btn{width:100%!important;min-width:0}
   .att-hdr{display:none}
   .att-row{grid-template-columns:24px minmax(0,1fr);padding:10px 8px;gap:8px}
-  .att-row .status-grp,.att-row .note-inp{grid-column:1/-1}
+  .att-row .status-grp,.att-row .att-note-cell{grid-column:1/-1}
   .st{flex:1;justify-content:center;padding:7px 8px}
   .mini-bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
   .mini-stat{border-bottom:1px solid var(--slate-100)}
@@ -658,7 +667,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div class="dashboard-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
         <div class="card">
           <div class="ch"><h3>⚠️ <span data-ar="أكثر الطلاب غياباً" data-en="Most Absent Students">أكثر الطلاب غياباً</span></h3></div>
-          <div class="tw"><table><thead><tr><th>#</th><th data-ar="الطالب" data-en="Student">الطالب</th><th data-ar="الفصل" data-en="Class">الفصل</th><th data-ar="غياب" data-en="Absences">غياب</th></tr></thead><tbody id="dashAbsent"></tbody></table></div>
+          <div class="tw"><table><thead><tr><th>#</th><th data-ar="الطالب" data-en="Student">الطالب</th><th data-ar="الفصل" data-en="Class">الفصل</th><th data-ar="غياب بعذر" data-en="Excused">غياب بعذر</th><th data-ar="غياب بدون عذر" data-en="Unexcused">غياب بدون عذر</th></tr></thead><tbody id="dashAbsent"></tbody></table></div>
         </div>
         <div class="card">
           <div class="ch"><h3>📅 <span data-ar="إحصائيات اليوم" data-en="Today's Stats">إحصائيات اليوم</span></h3></div>
@@ -692,7 +701,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         <div class="qa-bar">
           <span data-ar="تحديد الكل:" data-en="Mark All:">تحديد الكل:</span>
           <button class="btn btn-g btn-sm" onclick="markAll('present')">✅ <span data-ar="حاضر" data-en="Present">حاضر</span></button>
-          <button class="btn btn-r btn-sm" onclick="markAll('absent')">❌ <span data-ar="غائب" data-en="Absent">غائب</span></button>
+          <button class="btn btn-r btn-sm" onclick="markAll('absent')">❌ <span data-ar="غياب بعذر" data-en="Excused Absence">غياب بعذر</span></button>
           <button class="btn btn-out btn-sm" onclick="markAll('tardy')">⏰ <span data-ar="متأخر" data-en="Tardy">متأخر</span></button>
           <button class="btn btn-o btn-sm" onclick="markAll('early')">🕐 <span data-ar="انصراف مبكر" data-en="Early Leave">انصراف مبكر</span></button>
         </div>
@@ -726,7 +735,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
             <select id="stuClsF" onchange="renderStuTable()"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select>
           </div>
           <div class="tw"><table>
-            <thead><tr><th>#</th><th data-ar="الاسم" data-en="Name">الاسم</th><th data-ar="الرقم المدرسي" data-en="School ID">الرقم المدرسي</th><th data-ar="الفصل" data-en="Class">الفصل</th><th data-ar="ولي الأمر" data-en="Guardian">ولي الأمر</th><th data-ar="الجوال" data-en="Mobile">الجوال</th><th data-ar="البريد" data-en="Email">البريد</th><th data-ar="الغياب" data-en="Absences">الغياب</th><th data-ar="إجراءات" data-en="Actions">إجراءات</th></tr></thead>
+            <thead><tr><th>#</th><th data-ar="الاسم" data-en="Name">الاسم</th><th data-ar="الرقم المدرسي" data-en="School ID">الرقم المدرسي</th><th data-ar="الفصل" data-en="Class">الفصل</th><th data-ar="ولي الأمر" data-en="Guardian">ولي الأمر</th><th data-ar="الجوال" data-en="Mobile">الجوال</th><th data-ar="البريد" data-en="Email">البريد</th><th data-ar="غياب بعذر" data-en="Excused">غياب بعذر</th><th data-ar="غياب بدون عذر" data-en="Unexcused">غياب بدون عذر</th><th data-ar="إجراءات" data-en="Actions">إجراءات</th></tr></thead>
             <tbody id="stuTbody"></tbody>
           </table></div>
         </div>
@@ -1089,16 +1098,16 @@ const T = {
     nameRequired:'❌ الاسم مطلوب', classRequired:'❌ الاسم والرقم إلزاميان',
     selectClass:'❌ اختر الفصل أولاً', noNames:'❌ لا توجد أسماء',
     loginError:'❌ بيانات الدخول غير صحيحة',
-    present:'حاضر', absent:'غائب', tardy:'متأخر', earlyLeave:'انصراف مبكر', fullDay:'يوم كامل',
+    present:'حاضر', absent:'غائب', excusedAbsence:'غياب بعذر', unexcusedAbsence:'غياب بدون عذر', tardy:'متأخر', earlyLeave:'انصراف مبكر', fullDay:'يوم كامل',
     markAllPresent:'✅ تم تحديد الكل حاضراً',
-    markAllAbsent:'❌ تم تحديد الكل غائباً',
+    markAllAbsent:'❌ تم تحديد الكل غياباً بعذر',
     markAllTardy:'⏰ تم تحديد الكل متأخراً',
     markAllEarly:'🕐 تم تحديد الكل انصراف مبكر',
     recordSaved:'💾 تم حفظ سجل الحضور',
     noStudents:'لا يوجد طلاب في هذا الفصل',
     selectRequired:'⚠️ اختر الفصل والتاريخ',
     total:'إجمالي', classes_lbl:'فصول', teachers_lbl:'مستخدمون',
-    todayPresent:'حضور اليوم', todayAbsent:'غياب اليوم', todayTardy:'تأخر اليوم', todayEarly:'انصراف مبكر',
+    todayPresent:'حضور اليوم', todayAbsent:'غياب اليوم', todayExcusedAbsence:'غياب بعذر اليوم', todayUnexcusedAbsence:'غياب بدون عذر اليوم', todayTardy:'تأخر اليوم', todayEarly:'انصراف مبكر',
     days:['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'],
     months:['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'],
     roles:{admin:'مدير النظام',principal:'مدير المدرسة',teacher:'معلم',supervisor:'مشرف'},
@@ -1128,16 +1137,16 @@ const T = {
     nameRequired:'❌ Name is required', classRequired:'❌ Code and name are required',
     selectClass:'❌ Please select a class first', noNames:'❌ No names to import',
     loginError:'❌ Invalid email or password',
-    present:'Present', absent:'Absent', tardy:'Tardy', earlyLeave:'Early Leave', fullDay:'Full Day',
+    present:'Present', absent:'Absent', excusedAbsence:'Excused Absence', unexcusedAbsence:'Unexcused Absence', tardy:'Tardy', earlyLeave:'Early Leave', fullDay:'Full Day',
     markAllPresent:'✅ All marked as Present',
-    markAllAbsent:'❌ All marked as Absent',
+    markAllAbsent:'❌ All marked as Excused Absence',
     markAllTardy:'⏰ All marked as Tardy',
     markAllEarly:'🕐 All marked as Early Leave',
     recordSaved:'💾 Attendance record saved',
     noStudents:'No students in this class',
     selectRequired:'⚠️ Select class and date first',
     total:'Total', classes_lbl:'Classes', teachers_lbl:'Users',
-    todayPresent:"Today's Present", todayAbsent:"Today's Absent", todayTardy:'Tardy Today', todayEarly:'Early Leave Today',
+    todayPresent:"Today's Present", todayAbsent:"Today's Absent", todayExcusedAbsence:'Excused Absence Today', todayUnexcusedAbsence:'Unexcused Absence Today', todayTardy:'Tardy Today', todayEarly:'Early Leave Today',
     days:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     months:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
     roles:{admin:'System Admin',principal:'Principal',teacher:'Teacher',supervisor:'Supervisor'},
@@ -1319,6 +1328,7 @@ function emptySemester(){return{attendance:{},notifications:[],behavior:emptyBeh
 function emptyAcademicYear(label,classes={}){
   return{label,classes:copyData(classes),students:{},semesters:{'1':emptySemester(),'2':emptySemester()}};
 }
+function normalizedAbsenceType(record){return record?.absenceType==='unexcused'?'unexcused':'excused';}
 function normalizeDailyAttendance(attendance){
   const normalized={};
   const priority={present:1,tardy:2,early:3,absent:4};
@@ -1337,7 +1347,8 @@ function normalizeDailyAttendance(attendance){
           updatedByName:record.updatedByName||previous?.updatedByName||'',
           updatedAt:record.updatedAt||previous?.updatedAt||''
         };
-        if(!previous||(priority[status]||0)>=(priority[previous.status]||0))daily[studentId]={status,note:[...new Set(notes)].join(' | '),...attribution};
+        const absenceFields=status==='absent'?{absenceType:normalizedAbsenceType(record)==='unexcused'||(previous?.status==='absent'&&normalizedAbsenceType(previous)==='unexcused')?'unexcused':'excused'}:{};
+        if(!previous||(priority[status]||0)>=(priority[previous.status]||0))daily[studentId]={status,...absenceFields,note:[...new Set(notes)].join(' | '),...attribution};
         else if(notes.length)previous.note=[...new Set(notes)].join(' | ');
       };
       Object.entries(stored||{}).forEach(([key,value])=>{
@@ -1890,20 +1901,23 @@ function loadAttTable(){
   document.getElementById('attCardTitle').textContent=`${clsObj?className(clsObj):cls} — ${date} — ${user?.name||user?.email||''}`;
   const students=visibleStudents().filter(s=>s.classId===cls).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
   const saved=(db.attendance[cls]&&db.attendance[cls][date])||{};
-  let cp=0,ca=0,ct=0,ce=0;
-  students.forEach(s=>{const st=(saved[s.id]&&saved[s.id].status)||'present';if(st==='absent')ca++;else if(st==='tardy')ct++;else if(st==='early')ce++;else cp++;});
+  let cp=0,cae=0,cau=0,ct=0,ce=0;
+  students.forEach(s=>{const rec=saved[s.id];const st=rec?.status||'present';if(st==='absent'){if(normalizedAbsenceType(rec)==='unexcused')cau++;else cae++;}else if(st==='tardy')ct++;else if(st==='early')ce++;else cp++;});
   // Mini stats
   document.getElementById('attMini').innerHTML=`
     <div class="mini-stat"><div class="mini-stat-num" style="color:var(--brand)">${students.length}</div><div class="mini-stat-lbl">${t('total')}</div></div>
     <div class="mini-stat"><div class="mini-stat-num" style="color:var(--success)" id="mcP">${cp}</div><div class="mini-stat-lbl">✅ ${t('present')}</div></div>
-    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--danger)" id="mcA">${ca}</div><div class="mini-stat-lbl">❌ ${t('absent')}</div></div>
+    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--danger)" id="mcAE">${cae}</div><div class="mini-stat-lbl">✓ ${t('excusedAbsence')}</div></div>
+    <div class="mini-stat"><div class="mini-stat-num" style="color:var(--danger)" id="mcAU">${cau}</div><div class="mini-stat-lbl">! ${t('unexcusedAbsence')}</div></div>
     <div class="mini-stat"><div class="mini-stat-num" style="color:var(--brand)" id="mcT">${ct}</div><div class="mini-stat-lbl">⏰ ${t('tardy')}</div></div>
     <div class="mini-stat"><div class="mini-stat-num" style="color:var(--warning)" id="mcE">${ce}</div><div class="mini-stat-lbl">🕐 ${t('earlyLeave')}</div></div>
     <div class="mini-stat"><div class="mini-stat-num" style="color:var(--brand)" id="mcPct">${students.length>0?Math.round((cp+ct)/students.length*100):0}%</div><div class="mini-stat-lbl">%</div></div>`;
   if(!students.length){document.getElementById('attRows').innerHTML=`<div style="text-align:center;padding:30px;color:var(--slate-400)">${t('noStudents')}</div>`;return;}
   document.getElementById('attRows').innerHTML=students.map((s,i)=>{
-    const st=(saved[s.id]&&saved[s.id].status)||'present';
-    const nt=(saved[s.id]&&saved[s.id].note)||'';
+    const rec=saved[s.id]||{};
+    const st=rec.status||'present';
+    const nt=rec.note||'';
+    const absenceType=normalizedAbsenceType(rec);
     const rc=st==='absent'?'r-absent':st==='tardy'?'r-tardy':st==='early'?'r-early':'r-present';
     return`<div class="att-row ${rc}" id="ar-${s.id}">
       <div class="att-num">${i+1}</div>
@@ -1914,7 +1928,13 @@ function loadAttTable(){
           <button class="st st-l ${st==='tardy'?'act':''}" onclick="setAtt('${s.id}','tardy',this)">⏰ ${LANG==='ar'?'متأخر':'Tardy'}</button>
           <button class="st st-e ${st==='early'?'act':''}" onclick="setAtt('${s.id}','early',this)">🕐 ${LANG==='ar'?'انصراف':'Early'}</button>
       </div>
-      <div><input class="note-inp" value="${nt.replace(/"/g,'&quot;')}" placeholder="${LANG==='ar'?'ملاحظة...':'Note...'}" onchange="setNote('${s.id}',this.value)"></div>
+      <div class="att-note-cell">
+        <div class="absence-type ${st==='absent'?'show':''}" id="ax-${s.id}">
+          <button type="button" class="${absenceType==='excused'?'act':''}" onclick="setAbsenceType('${s.id}','excused',this)">✓ ${t('excusedAbsence')}</button>
+          <button type="button" class="${absenceType==='unexcused'?'act':''}" onclick="setAbsenceType('${s.id}','unexcused',this)">! ${t('unexcusedAbsence')}</button>
+        </div>
+        <input class="note-inp" value="${nt.replace(/"/g,'&quot;')}" placeholder="${LANG==='ar'?'ملاحظة...':'Note...'}" onchange="setNote('${s.id}',this.value)">
+      </div>
     </div>`;
   }).join('');
 }
@@ -1935,7 +1955,8 @@ function setAtt(sid,status,btn){
   ensureAttRec(cls,date);
   const prev=db.attendance[cls][date][sid];
   const note=prev?prev.note:'';
-  db.attendance[cls][date][sid]={status,note,...attendanceAttribution()};
+  const absenceFields=status==='absent'?{absenceType:prev?.status==='absent'?normalizedAbsenceType(prev):'excused'}:{};
+  db.attendance[cls][date][sid]={status,...absenceFields,note,...attendanceAttribution()};
   if(status==='absent'){
     addNotif(sid,cls,date);
   } else {
@@ -1947,7 +1968,26 @@ function setAtt(sid,status,btn){
     row.className='att-row '+(status==='absent'?'r-absent':status==='tardy'?'r-tardy':status==='early'?'r-early':'r-present');
     row.querySelectorAll('.st').forEach(b=>b.classList.remove('act'));
     btn.classList.add('act');
+    const chooser=document.getElementById('ax-'+sid);
+    if(chooser){
+      chooser.classList.toggle('show',status==='absent');
+      chooser.querySelectorAll('button').forEach((button,index)=>button.classList.toggle('act',status==='absent'&&index===(absenceFields.absenceType==='unexcused'?1:0)));
+    }
   }
+  updAttCounters(cls,date);
+}
+
+function setAbsenceType(sid,type,btn){
+  if(type!=='excused'&&type!=='unexcused')return;
+  const cls=document.getElementById('attClass').value;
+  const date=document.getElementById('attDate').value;
+  if(!cls||!date){toast(t('selectRequired'));return;}
+  ensureAttRec(cls,date);
+  const record=db.attendance[cls][date][sid];
+  if(!record||record.status!=='absent')return;
+  db.attendance[cls][date][sid]={...record,absenceType:type,...attendanceAttribution()};
+  save();
+  btn.closest('.absence-type')?.querySelectorAll('button').forEach(button=>button.classList.toggle('act',button===btn));
   updAttCounters(cls,date);
 }
 
@@ -1975,9 +2015,9 @@ function setNote(sid,note){
 function updAttCounters(cls,date){
   const students=visibleStudents().filter(s=>s.classId===cls);
   const saved=(db.attendance[cls]&&db.attendance[cls][date])||{};
-  let p=0,a=0,tardy=0,e=0;
-  students.forEach(s=>{const st=(saved[s.id]&&saved[s.id].status)||'present';if(st==='absent')a++;else if(st==='tardy')tardy++;else if(st==='early')e++;else p++;});
-  ['mcP','mcA','mcT','mcE'].forEach((id,i)=>{const el=document.getElementById(id);if(el)el.textContent=[p,a,tardy,e][i];});
+  let p=0,ae=0,au=0,tardy=0,e=0;
+  students.forEach(s=>{const rec=saved[s.id];const st=rec?.status||'present';if(st==='absent'){if(normalizedAbsenceType(rec)==='unexcused')au++;else ae++;}else if(st==='tardy')tardy++;else if(st==='early')e++;else p++;});
+  ['mcP','mcAE','mcAU','mcT','mcE'].forEach((id,i)=>{const el=document.getElementById(id);if(el)el.textContent=[p,ae,au,tardy,e][i];});
   const pct=document.getElementById('mcPct');if(pct)pct.textContent=students.length>0?Math.round((p+tardy)/students.length*100)+'%':'0%';
 }
 
@@ -1988,7 +2028,8 @@ function markAll(status){
   ensureAttRec(cls,date);
   visibleStudents().filter(s=>s.classId===cls).forEach(s=>{
     const prev=db.attendance[cls][date][s.id];
-    db.attendance[cls][date][s.id]={status,note:prev?prev.note:'',...attendanceAttribution()};
+    const absenceFields=status==='absent'?{absenceType:'excused'}:{};
+    db.attendance[cls][date][s.id]={status,...absenceFields,note:prev?prev.note:'',...attendanceAttribution()};
     if(status==='absent')addNotif(s.id,cls,date);
     else db.notifications=db.notifications.filter(n=>!(n.studentId===s.id&&n.classId===cls&&n.date===date&&n.status==='pending'));
   });
@@ -2003,8 +2044,9 @@ function saveAttRecord(){
   if(!cls||!date){toast(t('selectRequired'));return;}
   ensureAttRec(cls,date);
   visibleStudents().filter(s=>s.classId===cls).forEach(s=>{
-    if(!db.attendance[cls][date][s.id])db.attendance[cls][date][s.id]={status:'present',note:'',...attendanceAttribution()};
-    else db.attendance[cls][date][s.id]={...db.attendance[cls][date][s.id],...attendanceAttribution()};
+    const record=db.attendance[cls][date][s.id];
+    if(!record)db.attendance[cls][date][s.id]={status:'present',note:'',...attendanceAttribution()};
+    else db.attendance[cls][date][s.id]={...record,...(record.status==='absent'?{absenceType:normalizedAbsenceType(record)}:{}),...attendanceAttribution()};
   });
   save(); toast(t('recordSaved'));
   setTimeout(()=>goToDashboard(), 800);
@@ -2014,19 +2056,23 @@ function saveAttRecord(){
 // STUDENT STATS
 // ════════════════════════════════════════════
 function getStuStats(sid,from,to,month,year){
-  let p=0,a=0,tardy=0,e=0,ad=[];
+  let p=0,a=0,ae=0,au=0,tardy=0,e=0,ad=[],aed=[],aud=[];
   Object.entries(db.attendance).forEach(([cls,byDate])=>{
     Object.entries(byDate).forEach(([date,byStu])=>{
       const dd=new Date(date);
       if(from&&date<from)return; if(to&&date>to)return;
       if(month&&dd.getMonth()+1!=month)return; if(year&&dd.getFullYear()!=year)return;
       const rec=byStu[sid];if(!rec)return;
-      if(rec.status==='absent'){a++;if(!ad.includes(date))ad.push(date);}
+      if(rec.status==='absent'){
+        a++;if(!ad.includes(date))ad.push(date);
+        if(normalizedAbsenceType(rec)==='unexcused'){au++;if(!aud.includes(date))aud.push(date);}
+        else{ae++;if(!aed.includes(date))aed.push(date);}
+      }
       else if(rec.status==='tardy')tardy++;
       else if(rec.status==='early')e++;else p++;
     });
   });
-  return{present:p,absent:a,tardy,early:e,absentDates:ad.sort()};
+  return{present:p,absent:a,excusedAbsence:ae,unexcusedAbsence:au,tardy,early:e,absentDates:ad.sort(),excusedAbsenceDates:aed.sort(),unexcusedAbsenceDates:aud.sort()};
 }
 
 // ════════════════════════════════════════════
@@ -2036,14 +2082,15 @@ function renderDashboard(){
   const stus=visibleStudents();
   const cls=visibleClasses();
   const tch=Object.values(db.teachers).filter(tc=>(tc.programs||PROGRAMS).includes(db.activeProgram));
-  const td=today(); let tdA=0,tdT=0,tdE=0,tdP=0;
-  Object.values(db.attendance).forEach(bd=>{if(!bd[td])return;Object.values(bd[td]).forEach(r=>{if(r.status==='absent')tdA++;else if(r.status==='tardy')tdT++;else if(r.status==='early')tdE++;else tdP++;});});
+  const td=today(); let tdAE=0,tdAU=0,tdT=0,tdE=0,tdP=0;
+  Object.values(db.attendance).forEach(bd=>{if(!bd[td])return;Object.values(bd[td]).forEach(r=>{if(r.status==='absent'){if(normalizedAbsenceType(r)==='unexcused')tdAU++;else tdAE++;}else if(r.status==='tardy')tdT++;else if(r.status==='early')tdE++;else tdP++;});});
   document.getElementById('dashStats').innerHTML=`
     <div class="sc b"><div class="sc-ico">👥</div><div><div class="sc-num">${stus.length}</div><div class="sc-lbl">${t('total')} ${LANG==='ar'?'الطلاب':'Students'}</div></div></div>
     <div class="sc t"><div class="sc-ico">🏫</div><div><div class="sc-num">${cls.length}</div><div class="sc-lbl">${t('classes_lbl')}</div></div></div>
     <div class="sc p"><div class="sc-ico">👨‍🏫</div><div><div class="sc-num">${tch.length}</div><div class="sc-lbl">${t('teachers_lbl')}</div></div></div>
     <div class="sc g"><div class="sc-ico">✅</div><div><div class="sc-num">${tdP}</div><div class="sc-lbl">${t('todayPresent')}</div></div></div>
-    <div class="sc r"><div class="sc-ico">❌</div><div><div class="sc-num">${tdA}</div><div class="sc-lbl">${t('todayAbsent')}</div></div></div>
+    <div class="sc r"><div class="sc-ico">✓</div><div><div class="sc-num">${tdAE}</div><div class="sc-lbl">${t('todayExcusedAbsence')}</div></div></div>
+    <div class="sc r"><div class="sc-ico">!</div><div><div class="sc-num">${tdAU}</div><div class="sc-lbl">${t('todayUnexcusedAbsence')}</div></div></div>
     <div class="sc b"><div class="sc-ico">⏰</div><div><div class="sc-num">${tdT}</div><div class="sc-lbl">${t('todayTardy')}</div></div></div>
     <div class="sc o"><div class="sc-ico">🕐</div><div><div class="sc-num">${tdE}</div><div class="sc-lbl">${t('todayEarly')}</div></div></div>`;
   // Chart
@@ -2060,9 +2107,9 @@ function renderDashboard(){
   const topCls=cls.map(c=>{const ss=stus.filter(s=>s.classId===c.id);let p=0,tot=0;ss.forEach(s=>{const st=getStuStats(s.id);p+=st.present+st.tardy;tot+=st.present+st.absent+st.tardy+st.early;});return{...c,pct:tot>0?Math.round(p/tot*100):100};}).sort((a,b)=>b.pct-a.pct).slice(0,6);
   document.getElementById('dashTopCls').innerHTML=topCls.map(c=>`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:.81rem;font-weight:600;margin-bottom:3px"><span>${className(c)}</span><span style="color:${c.pct>=90?'var(--success)':c.pct>=70?'var(--warning)':'var(--danger)'}">${c.pct}%</span></div><div class="pb"><div class="pf ${c.pct>=90?'hi':c.pct>=70?'mi':'lo'}" style="width:${c.pct}%"></div></div></div>`).join('');
   // Most absent
-  const top=stus.map(s=>{const st=getStuStats(s.id);return{...s,absent:st.absent};}).filter(s=>s.absent>0).sort((a,b)=>b.absent-a.absent).slice(0,7);
-  document.getElementById('dashAbsent').innerHTML=top.length?top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${db.classes[s.classId]?className(db.classes[s.classId]):s.classId}</span></td><td><span class="badge bg-r">${s.absent}</span></td></tr>`).join(''):`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--success)">${t('noAbsent')} 🎉</td></tr>`;
-  document.getElementById('dashToday').innerHTML=`<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px"><div style="background:var(--success-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--success-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--success)">${tdP}</div><div style="font-size:.72rem;color:var(--success);margin-top:2px">${t('present')}</div></div><div style="background:var(--danger-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--danger-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--danger)">${tdA}</div><div style="font-size:.72rem;color:var(--danger);margin-top:2px">${t('absent')}</div></div><div style="background:var(--brand-light);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--brand-mid)"><div style="font-size:1.6rem;font-weight:900;color:var(--brand)">${tdT}</div><div style="font-size:.72rem;color:var(--brand);margin-top:2px">${t('tardy')}</div></div><div style="background:var(--warning-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--warning-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--warning)">${tdE}</div><div style="font-size:.72rem;color:var(--warning);margin-top:2px">${t('earlyLeave')}</div></div></div>`;
+  const top=stus.map(s=>{const st=getStuStats(s.id);return{...s,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence};}).filter(s=>s.absent>0).sort((a,b)=>b.absent-a.absent).slice(0,7);
+  document.getElementById('dashAbsent').innerHTML=top.length?top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${db.classes[s.classId]?className(db.classes[s.classId]):s.classId}</span></td><td><span class="badge bg-r">${s.excusedAbsence}</span></td><td><span class="badge bg-r">${s.unexcusedAbsence}</span></td></tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--success)">${t('noAbsent')} 🎉</td></tr>`;
+  document.getElementById('dashToday').innerHTML=`<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px"><div style="background:var(--success-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--success-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--success)">${tdP}</div><div style="font-size:.72rem;color:var(--success);margin-top:2px">${t('present')}</div></div><div style="background:var(--danger-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--danger-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--danger)">${tdAE}</div><div style="font-size:.72rem;color:var(--danger);margin-top:2px">${t('excusedAbsence')}</div></div><div style="background:var(--danger-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--danger-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--danger)">${tdAU}</div><div style="font-size:.72rem;color:var(--danger);margin-top:2px">${t('unexcusedAbsence')}</div></div><div style="background:var(--brand-light);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--brand-mid)"><div style="font-size:1.6rem;font-weight:900;color:var(--brand)">${tdT}</div><div style="font-size:.72rem;color:var(--brand);margin-top:2px">${t('tardy')}</div></div><div style="background:var(--warning-bg);border-radius:var(--radius);padding:16px;text-align:center;border:1px solid var(--warning-border)"><div style="font-size:1.6rem;font-weight:900;color:var(--warning)">${tdE}</div><div style="font-size:.72rem;color:var(--warning);margin-top:2px">${t('earlyLeave')}</div></div></div>`;
 }
 
 // ════════════════════════════════════════════
@@ -2134,9 +2181,10 @@ function renderStuTable(){
     <td style="font-size:.83rem">${s.parent||'<span style="color:var(--warning)">—</span>'}</td>
     <td style="font-size:.8rem">${s.parentPhone||'<span style="color:var(--warning)">—</span>'}</td>
     <td style="font-size:.78rem">${s.parentEmail||'<span style="color:var(--slate-300)">—</span>'}</td>
-    <td><span class="badge ${st.absent>5?'bg-r':st.absent>2?'bg-o':'bg-g'}">${st.absent}</span></td>
+    <td><span class="badge ${st.excusedAbsence>5?'bg-r':st.excusedAbsence>2?'bg-o':'bg-g'}">${st.excusedAbsence}</span></td>
+    <td><span class="badge ${st.unexcusedAbsence>5?'bg-r':st.unexcusedAbsence>2?'bg-o':'bg-g'}">${st.unexcusedAbsence}</span></td>
     <td>${hasPermission('students_edit')?`<button class="btn btn-out btn-xs" onclick="editStu('${s.id}')">✏️</button>`:''} ${hasPermission('students_delete')?`<button class="btn btn-r btn-xs" onclick="delStu('${s.id}')">🗑️</button>`:''}</td></tr>`;
-  }).join('')||`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--slate-400)">${t('noData')}</td></tr>`;
+  }).join('')||`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--slate-400)">${t('noData')}</td></tr>`;
 }
 
 // ════════════════════════════════════════════
@@ -2342,7 +2390,7 @@ function rptRow(s,dates,cls,month){
   const tot=st.present+st.absent+st.tardy+st.early; const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):100;
   const bc=pct>=90?'hi':pct>=70?'mi':'lo';
   const bdg=st.absent===0&&st.tardy===0&&st.early===0?`<span class="badge bg-g">${t('regular')}</span>`:st.absent<=2?`<span class="badge bg-o">${t('warning')}</span>`:`<span class="badge bg-r">${t('critical')}</span>`;
-  return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-r">${st.absent}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td><div style="font-size:.81rem;font-weight:600">${pct}%</div><div class="pb"><div class="pf ${bc}" style="width:${pct}%"></div></div></td><td>${bdg}</td></tr>`;
+  return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td><div style="font-size:.81rem;font-weight:600">${pct}%</div><div class="pb"><div class="pf ${bc}" style="width:${pct}%"></div></div></td><td>${bdg}</td></tr>`;
 }
 
 function renderClsRpt(){
@@ -2355,7 +2403,7 @@ function renderClsRpt(){
     const ss=visibleStudents().filter(s=>s.classId===c.id);
     if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:14px 0 8px;font-size:.9rem">${className(c)}</div>
-    <table style="margin-bottom:16px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حضور':'Present'}</th><th>${LANG==='ar'?'غياب':'Absent'}</th><th>${t('tardy')}</th><th>${LANG==='ar'?'مبكر':'Early'}</th><th>%</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${ss.map(s=>rptRow(s,[],c.id,month)).join('')}</tbody></table>`;
+    <table style="margin-bottom:16px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حضور':'Present'}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${LANG==='ar'?'مبكر':'Early'}</th><th>%</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${ss.map(s=>rptRow(s,[],c.id,month)).join('')}</tbody></table>`;
   });
   document.getElementById('clsRptOut').innerHTML=html||`<div style="text-align:center;padding:30px;color:var(--slate-400)">${t('noData')}</div>`;
 }
@@ -2380,15 +2428,17 @@ function renderStuRpt(){
   const stu=db.students[sid]; const cls=stu?db.classes[stu.classId]:null;
   const st=getStuStats(sid,null,null,month||null,null);
   const tot=st.present+st.absent+st.tardy+st.early; const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):100;
-  const aList=st.absentDates.map(d=>`<span class="badge bg-r" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--success)">${t('noAbsent')} 🎉</span>`;
+  const excusedList=st.excusedAbsenceDates.map(d=>`<span class="badge bg-o" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
+  const unexcusedList=st.unexcusedAbsenceDates.map(d=>`<span class="badge bg-r" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
   out.innerHTML=`<div style="background:var(--slate-50);border-radius:var(--radius);padding:16px;margin-bottom:14px;border:1px solid var(--slate-200)">
     <div style="font-size:1rem;font-weight:800;color:var(--slate-800)">${stu?stu.name:'—'}</div>
     <div style="font-size:.78rem;color:var(--slate-400);margin-top:3px">${cls?className(cls):'—'} | ${stu&&stu.parent?stu.parent:'—'} | ${stu&&stu.parentPhone?stu.parentPhone:'—'}</div>
   </div>
-  <div class="sg" style="grid-template-columns:repeat(6,1fr);margin-bottom:14px">
+  <div class="sg" style="grid-template-columns:repeat(7,1fr);margin-bottom:14px">
     <div class="sc b" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">📅</div><div><div class="sc-num" style="font-size:1.2rem">${tot}</div><div class="sc-lbl">${LANG==='ar'?'أيام':'Days'}</div></div></div>
     <div class="sc g" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">✅</div><div><div class="sc-num" style="font-size:1.2rem">${st.present}</div><div class="sc-lbl">${t('present')}</div></div></div>
-    <div class="sc r" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">❌</div><div><div class="sc-num" style="font-size:1.2rem">${st.absent}</div><div class="sc-lbl">${t('absent')}</div></div></div>
+    <div class="sc r" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">✓</div><div><div class="sc-num" style="font-size:1.2rem">${st.excusedAbsence}</div><div class="sc-lbl">${t('excusedAbsence')}</div></div></div>
+    <div class="sc r" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">!</div><div><div class="sc-num" style="font-size:1.2rem">${st.unexcusedAbsence}</div><div class="sc-lbl">${t('unexcusedAbsence')}</div></div></div>
     <div class="sc b" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">⏰</div><div><div class="sc-num" style="font-size:1.2rem">${st.tardy}</div><div class="sc-lbl">${t('tardy')}</div></div></div>
     <div class="sc o" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">🕐</div><div><div class="sc-num" style="font-size:1.2rem">${st.early}</div><div class="sc-lbl">${t('earlyLeave')}</div></div></div>
     <div class="sc p" style="padding:12px"><div class="sc-ico" style="width:32px;height:32px;font-size:13px">📊</div><div><div class="sc-num" style="font-size:1.2rem">${pct}%</div><div class="sc-lbl">%</div></div></div>
@@ -2400,7 +2450,7 @@ function renderStuRpt(){
     </div>
     <div class="pb" style="height:10px"><div class="pf ${pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div>
   </div>
-  <div style="margin-top:14px"><div style="font-weight:600;font-size:.84rem;color:var(--danger);margin-bottom:7px">🗓️ ${t('absentDays')}:</div>${aList}</div>`;
+  <div style="margin-top:14px"><div style="font-weight:600;font-size:.84rem;color:var(--danger);margin-bottom:7px">🗓️ ${t('absentDays')}:</div><div style="margin-bottom:7px"><strong>${t('excusedAbsence')}:</strong> ${excusedList}</div><div><strong>${t('unexcusedAbsence')}:</strong> ${unexcusedList}</div></div>`;
 }
 
 function renderDayRpt(){
@@ -2409,13 +2459,13 @@ function renderDayRpt(){
   if(!date){document.getElementById('dayRptOut').innerHTML='';return;}
   let rows='';
   visibleClasses().forEach(c=>{
-    let p=0,a=0,tardy=0,e=0; const bd=db.attendance[c.id]&&db.attendance[c.id][date];
-    if(bd)Object.values(bd).forEach(r=>{if(r.status==='absent')a++;else if(r.status==='tardy')tardy++;else if(r.status==='early')e++;else p++;});
+    let p=0,ae=0,au=0,tardy=0,e=0; const bd=db.attendance[c.id]&&db.attendance[c.id][date];
+    if(bd)Object.values(bd).forEach(r=>{if(r.status==='absent'){if(normalizedAbsenceType(r)==='unexcused')au++;else ae++;}else if(r.status==='tardy')tardy++;else if(r.status==='early')e++;else p++;});
     const cnt=visibleStudents().filter(s=>s.classId===c.id).length;
-    const tot=p+a+tardy+e; const pct=tot>0?Math.round((p+tardy)/tot*100):100;
-    rows+=`<tr><td style="font-weight:600">${className(c)}</td><td>${cnt}</td><td><span class="badge bg-g">${p}</span></td><td><span class="badge bg-r">${a}</span></td><td><span class="badge bg-b">${tardy}</span></td><td><span class="badge bg-o">${e}</span></td><td><span style="font-weight:600">${pct}%</span><div class="pb"><div class="pf ${pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div></td></tr>`;
+    const tot=p+ae+au+tardy+e; const pct=tot>0?Math.round((p+tardy)/tot*100):100;
+    rows+=`<tr><td style="font-weight:600">${className(c)}</td><td>${cnt}</td><td><span class="badge bg-g">${p}</span></td><td><span class="badge bg-o">${ae}</span></td><td><span class="badge bg-r">${au}</span></td><td><span class="badge bg-b">${tardy}</span></td><td><span class="badge bg-o">${e}</span></td><td><span style="font-weight:600">${pct}%</span><div class="pb"><div class="pf ${pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div></td></tr>`;
   });
-  document.getElementById('dayRptOut').innerHTML=`<table><thead><tr><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${LANG==='ar'?'الطلاب':'Students'}</th><th>${t('present')}</th><th>${t('absent')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
+  document.getElementById('dayRptOut').innerHTML=`<table><thead><tr><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${LANG==='ar'?'الطلاب':'Students'}</th><th>${t('present')}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderPerRpt(){
@@ -2429,8 +2479,8 @@ function renderPerRpt(){
   classes.forEach(c=>{
     const ss=visibleStudents().filter(s=>s.classId===c.id); if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:12px 0 6px">${className(c)}</div>
-    <table style="margin-bottom:14px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${t('present')}</th><th>${t('absent')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead>
-    <tbody>${ss.map(s=>{const st=getStuStats(s.id,from,to);const tot=st.present+st.absent+st.tardy+st.early;const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):100;return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-r">${st.absent}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct}%</td></tr>`;}).join('')}</tbody></table>`;
+    <table style="margin-bottom:14px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${t('present')}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead>
+    <tbody>${ss.map(s=>{const st=getStuStats(s.id,from,to);const tot=st.present+st.absent+st.tardy+st.early;const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):100;return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct}%</td></tr>`;}).join('')}</tbody></table>`;
   });
   document.getElementById('perRptOut').innerHTML=html;
 }
@@ -2438,8 +2488,8 @@ function renderPerRpt(){
 function renderTopRpt(){
   if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderTopRpt);
   const month=document.getElementById('rTopMon').value;
-  const top=visibleStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,null);const cls=db.classes[s.classId];return{...s,absent:st.absent,tardy:st.tardy,early:st.early,clsName:cls?className(cls):s.classId};}).filter(s=>s.absent>0||s.tardy>0||s.early>0).sort((a,b)=>b.absent-a.absent||b.tardy-a.tardy||b.early-a.early);
-  document.getElementById('topRptOut').innerHTML=top.length?`<table><thead><tr><th>#</th><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${t('absent')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${s.clsName}</span></td><td><span class="badge bg-r">${s.absent}</span></td><td><span class="badge bg-b">${s.tardy}</span></td><td><span class="badge bg-o">${s.early}</span></td><td><span class="badge ${s.absent>=5?'bg-r':s.absent>=3?'bg-o':'bg-gr'}">${s.absent>=5?t('critical'):s.absent>=3?t('warning'):'ℹ️'}</span></td></tr>`).join('')}</tbody></table>`:`<div style="text-align:center;padding:30px;color:var(--success)">${t('noAbsent')} 🎉</div>`;
+  const top=visibleStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,null);const cls=db.classes[s.classId];return{...s,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence,tardy:st.tardy,early:st.early,clsName:cls?className(cls):s.classId};}).filter(s=>s.absent>0||s.tardy>0||s.early>0).sort((a,b)=>b.absent-a.absent||b.tardy-a.tardy||b.early-a.early);
+  document.getElementById('topRptOut').innerHTML=top.length?`<table><thead><tr><th>#</th><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${s.clsName}</span></td><td><span class="badge bg-r">${s.excusedAbsence}</span></td><td><span class="badge bg-r">${s.unexcusedAbsence}</span></td><td><span class="badge bg-b">${s.tardy}</span></td><td><span class="badge bg-o">${s.early}</span></td><td><span class="badge ${s.absent>=5?'bg-r':s.absent>=3?'bg-o':'bg-gr'}">${s.absent>=5?t('critical'):s.absent>=3?t('warning'):'ℹ️'}</span></td></tr>`).join('')}</tbody></table>`:`<div style="text-align:center;padding:30px;color:var(--success)">${t('noAbsent')} 🎉</div>`;
 }
 
 // ════════════════════════════════════════════
