@@ -19,6 +19,12 @@ function reportSemesterLabel(period=selectedReportAcademicPeriod()){
   return LANG==='ar'?`الفصل ${period.semester==='1'?'الأول':'الثاني'}`:`Semester ${period.semester}`;
 }
 
+async function ensureSelectedAttendanceReportPeriod(){
+  const period=selectedReportAcademicPeriod();
+  if(window.ensureAttendancePeriodLoaded)await Promise.all(period.semesters.map(semester=>window.ensureAttendancePeriodLoaded(period.academicYear,semester)));
+  return period;
+}
+
 function mergeReportAttendance(period){
   const merged={};const priority={present:1,tardy:2,early:3,absent:4};
   const year=db.academicYears?.[period.academicYear];
@@ -51,12 +57,13 @@ window.withAttendanceReportContext=function(callback){
   }
 };
 
-window.refreshActiveAttendanceReport=function(){
+window.refreshActiveAttendanceReport=async function(){
   if(!document.getElementById('page-reports')?.classList.contains('active'))return;
-  const config=activeReportConfig();config.render();
+  try{await ensureSelectedAttendanceReportPeriod();const config=activeReportConfig();config.render();}
+  catch(error){console.error('Attendance report refresh failed',error);toast(LANG==='ar'?'❌ تعذر تحميل بيانات التقرير':'❌ Could not load report data');}
 };
 
-window.refreshAttendanceReportFilters=function(options={}){
+window.refreshAttendanceReportFilters=async function(options={}){
   if(!db?.academicYears)return;
   syncActiveAcademicData();
   const yearSelect=document.getElementById('reportAcademicYear');const semesterSelect=document.getElementById('reportSemester');
@@ -66,6 +73,8 @@ window.refreshAttendanceReportFilters=function(options={}){
   yearSelect.innerHTML=years.map(year=>`<option value="${escapeReportHtml(year)}" ${year===selectedYear?'selected':''}>${escapeReportHtml(year)}</option>`).join('');
   const previousSemester=semesterSelect.value;const selectedSemester=['1','2','both'].includes(previousSemester)?previousSemester:String(db.activeSemester||'1');
   semesterSelect.innerHTML=`<option value="both" ${selectedSemester==='both'?'selected':''}>${LANG==='ar'?'الفصلان الأول والثاني':'Both Semesters'}</option><option value="1" ${selectedSemester==='1'?'selected':''}>${LANG==='ar'?'الفصل الأول':'Semester 1'}</option><option value="2" ${selectedSemester==='2'?'selected':''}>${LANG==='ar'?'الفصل الثاني':'Semester 2'}</option>`;
+  try{await ensureSelectedAttendanceReportPeriod();}
+  catch(error){console.error('Attendance report period load failed',error);toast(LANG==='ar'?'❌ تعذر تحميل بيانات الفترة المحددة':'❌ Could not load the selected period');return;}
   window.withAttendanceReportContext(()=>{
     const classes=visibleClasses().sort((a,b)=>className(a).localeCompare(className(b),LANG==='ar'?'ar':'en'));
     const label=cls=>`${className(cls)} · ${programLabel(cls.program)} · ${LANG==='ar'?'صف':'Grade'} ${classGrade(cls)}`;
@@ -233,6 +242,8 @@ function prepareActiveReport(){
 }
 
 async function exportActiveReport(button){
+  try{await ensureSelectedAttendanceReportPeriod();}
+  catch(error){console.error('Attendance export data load failed',error);toast(LANG==='ar'?'❌ تعذر تحميل بيانات التقرير':'❌ Could not load report data');return;}
   const report=prepareActiveReport();if(!report)return;
   const original=button.innerHTML;button.disabled=true;button.innerHTML=LANG==='ar'?'⏳ جارٍ التصدير...':'⏳ Exporting...';
   try{
@@ -275,11 +286,13 @@ function buildPrintDocument(report,content){
   </style></head><body><header class="official-header"><img src="${escapeReportHtml(headerUrl)}" alt="Najd National Schools official header"></header><h1 class="report-title">${escapeReportHtml(report.title)}</h1><div class="meta"><span><b>${rtl?'السنة الدراسية':'Academic Year'}:</b> ${escapeReportHtml(report.period.academicYear)}</span><span><b>${rtl?'الفصل الدراسي':'Semester'}:</b> ${escapeReportHtml(semester)}</span><span><b>${rtl?'البرنامج':'Program'}:</b> ${escapeReportHtml(programLabel(db.activeProgram))}</span><span><b>${rtl?'تاريخ الطباعة':'Printed'}:</b> ${escapeReportHtml(generated)}</span></div><main>${content}</main></body></html>`;
 }
 
-function printActiveReport(){
-  const report=prepareActiveReport();if(!report)return;
+async function printActiveReport(){
   const printWindow=window.open('','_blank','width=1100,height=800');
   if(!printWindow){toast(LANG==='ar'?'⚠️ اسمح بالنوافذ المنبثقة للطباعة':'⚠️ Allow pop-ups to print');return;}
   printWindow.opener=null;
+  try{await ensureSelectedAttendanceReportPeriod();}
+  catch(error){printWindow.close();console.error('Attendance print data load failed',error);toast(LANG==='ar'?'❌ تعذر تحميل بيانات التقرير':'❌ Could not load report data');return;}
+  const report=prepareActiveReport();if(!report){printWindow.close();return;}
   printWindow.document.open();
   printWindow.document.write(buildPrintDocument(report,printableReportContent(report.outputId)));
   printWindow.document.close();

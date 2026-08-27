@@ -823,11 +823,11 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
         <button class="tab" onclick="swTab('rPer',this)" data-ar="نطاق زمني" data-en="Date Range">📆 نطاق زمني</button>
         <button class="tab" onclick="swTab('rTop',this)" data-ar="الأكثر غياباً" data-en="Top Absent">⚠️ الأكثر غياباً</button>
       </div>
-      <div class="tp active" id="rCls"><div class="card"><div class="ch"><h3 data-ar="تقرير الفصل" data-en="Class Report">تقرير الفصل</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rClsS"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><select id="rMonS"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="renderClsRpt()">🔍</button></div><div id="clsRptOut"></div></div></div></div>
-      <div class="tp" id="rStu"><div class="card"><div class="ch"><h3 data-ar="تقرير الطالب" data-en="Student Report">تقرير الطالب</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rStuCls" onchange="fillRptStuList()"><option value="" data-ar="اختر الفصل" data-en="Select Class">اختر الفصل</option></select><select id="rStuS"><option value="" data-ar="اختر الطالب" data-en="Select Student">اختر الطالب</option></select><select id="rStuMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="renderStuRpt()">🔍</button></div><div id="stuRptOut"></div></div></div></div>
-      <div class="tp" id="rDay"><div class="card"><div class="ch"><h3 data-ar="التقرير اليومي" data-en="Daily Report">التقرير اليومي</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><input type="date" id="rDayD"><button class="btn btn-p btn-sm" onclick="renderDayRpt()">🔍</button></div><div id="dayRptOut"></div></div></div></div>
-      <div class="tp" id="rPer"><div class="card"><div class="ch"><h3 data-ar="نطاق زمني" data-en="Custom Date Range">نطاق زمني</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="من:" data-en="From:">من:</label><input type="date" id="rFrom"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="إلى:" data-en="To:">إلى:</label><input type="date" id="rTo"><select id="rPerCls"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><button class="btn btn-p btn-sm" onclick="renderPerRpt()">🔍</button></div><div id="perRptOut"></div></div></div></div>
-      <div class="tp" id="rTop"><div class="card"><div class="ch"><h3 data-ar="الأكثر غياباً" data-en="Most Absent">الأكثر غياباً</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rTopMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="renderTopRpt()">🔍</button></div><div id="topRptOut"></div></div></div></div>
+      <div class="tp active" id="rCls"><div class="card"><div class="ch"><h3 data-ar="تقرير الفصل" data-en="Class Report">تقرير الفصل</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rClsS"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><select id="rMonS"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="refreshActiveAttendanceReport()">🔍</button></div><div id="clsRptOut"></div></div></div></div>
+      <div class="tp" id="rStu"><div class="card"><div class="ch"><h3 data-ar="تقرير الطالب" data-en="Student Report">تقرير الطالب</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rStuCls" onchange="fillRptStuList()"><option value="" data-ar="اختر الفصل" data-en="Select Class">اختر الفصل</option></select><select id="rStuS"><option value="" data-ar="اختر الطالب" data-en="Select Student">اختر الطالب</option></select><select id="rStuMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="refreshActiveAttendanceReport()">🔍</button></div><div id="stuRptOut"></div></div></div></div>
+      <div class="tp" id="rDay"><div class="card"><div class="ch"><h3 data-ar="التقرير اليومي" data-en="Daily Report">التقرير اليومي</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><input type="date" id="rDayD"><button class="btn btn-p btn-sm" onclick="refreshActiveAttendanceReport()">🔍</button></div><div id="dayRptOut"></div></div></div></div>
+      <div class="tp" id="rPer"><div class="card"><div class="ch"><h3 data-ar="نطاق زمني" data-en="Custom Date Range">نطاق زمني</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="من:" data-en="From:">من:</label><input type="date" id="rFrom"><label style="font-size:.8rem;font-weight:600;color:var(--slate-500);align-self:center" data-ar="إلى:" data-en="To:">إلى:</label><input type="date" id="rTo"><select id="rPerCls"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select><button class="btn btn-p btn-sm" onclick="refreshActiveAttendanceReport()">🔍</button></div><div id="perRptOut"></div></div></div></div>
+      <div class="tp" id="rTop"><div class="card"><div class="ch"><h3 data-ar="الأكثر غياباً" data-en="Most Absent">الأكثر غياباً</h3><div class="report-actions"><button class="btn btn-g btn-sm" data-permission="reports" onclick="exportActiveReport(this)">📊 <span data-ar="Excel" data-en="Excel">Excel</span></button><button class="btn btn-out btn-sm" data-permission="reports" onclick="printActiveReport()">🖨️ <span data-ar="طباعة" data-en="Print">طباعة</span></button></div></div><div class="cb"><div class="sbar"><select id="rTopMon"><option value="" data-ar="كل الأشهر" data-en="All Months">كل الأشهر</option></select><button class="btn btn-p btn-sm" onclick="refreshActiveAttendanceReport()">🔍</button></div><div id="topRptOut"></div></div></div></div>
     </div>
 
     <!-- ══ NOTIFICATIONS ══ -->
@@ -1530,6 +1530,7 @@ let behaviorFlushInFlight=false;
 let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
 let attendanceSaveRetryDelay=900;
+const attendanceTablePeriods=new Map();
 
 function sharedStateRow(result){
   return Array.isArray(result?.data)?result.data[0]:result?.data;
@@ -1577,6 +1578,110 @@ function sameStateValue(left,right){
     return leftKeys.length===rightKeys.length&&leftKeys.every(key=>Object.prototype.hasOwnProperty.call(right,key)&&sameStateValue(left[key],right[key]));
   }
   return false;
+}
+const ATTENDANCE_TABLE_PAGE_SIZE=1000;
+function attendancePeriodKey(academicYear,semester){return `${academicYear}|${String(semester)}`;}
+function attendancePeriodCache(academicYear,semester){
+  const key=attendancePeriodKey(academicYear,semester);
+  if(!attendanceTablePeriods.has(key))attendanceTablePeriods.set(key,{loaded:false,attendance:{},lastUpdatedAt:'',promise:null});
+  return attendanceTablePeriods.get(key);
+}
+function attendanceRecordFromTableRow(row){
+  const record={
+    status:['present','absent','tardy','early'].includes(row?.status)?row.status:'present',
+    note:row?.note||'',updatedBy:row?.updated_by||'',updatedByEmail:row?.updated_by_email||'',
+    updatedByName:row?.updated_by_name||'',updatedAt:row?.updated_at||''
+  };
+  if(record.status==='absent')record.absenceType=row?.absence_type==='unexcused'?'unexcused':'excused';
+  return record;
+}
+function applyAttendanceTableRow(attendance,row){
+  if(!attendance[row.class_id])attendance[row.class_id]={};
+  if(!attendance[row.class_id][row.attendance_date])attendance[row.class_id][row.attendance_date]={};
+  const current=attendance[row.class_id][row.attendance_date][row.student_id];
+  if(!current||activityTimestamp({updatedAt:row.updated_at})>=activityTimestamp(current)){
+    attendance[row.class_id][row.attendance_date][row.student_id]=attendanceRecordFromTableRow(row);
+  }
+}
+async function readAttendanceTableRows(academicYear,semester,since=''){
+  const rows=[];
+  for(let from=0;;from+=ATTENDANCE_TABLE_PAGE_SIZE){
+    let query=window.neonClient.from('attendance_entries')
+      .select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at')
+      .eq('academic_year',academicYear).eq('semester',Number(semester))
+      .order('updated_at',{ascending:true}).order('class_id',{ascending:true})
+      .order('attendance_date',{ascending:true}).order('student_id',{ascending:true});
+    if(since)query=query.gt('updated_at',since);
+    const result=await query.range(from,from+ATTENDANCE_TABLE_PAGE_SIZE-1);
+    if(result.error)throw result.error;
+    const page=Array.isArray(result.data)?result.data:[];
+    rows.push(...page);
+    if(page.length<ATTENDANCE_TABLE_PAGE_SIZE)break;
+  }
+  return rows;
+}
+function applyAttendanceTableCacheToState(state,academicYear,semester){
+  const cache=attendanceTablePeriods.get(attendancePeriodKey(academicYear,semester));
+  if(!cache?.loaded)return false;
+  const sem=sharedSemester(state,academicYear,String(semester));
+  sem.attendance=copyData(cache.attendance);
+  if(state.activeAcademicYear===academicYear&&String(state.activeSemester)===String(semester))state.attendance=copyData(cache.attendance);
+  return true;
+}
+function overlayPendingAttendanceForPeriod(state,academicYear,semester){
+  attendancePatches.forEach(patch=>{
+    if(patch.academicYear===academicYear&&patch.semester===String(semester))applyAttendancePatch(state,patch);
+  });
+}
+async function syncAttendanceTablePeriod(academicYear,semester,{force=false}={}){
+  if(!window.neonClient||!academicYear||!['1','2'].includes(String(semester)))return false;
+  const cache=attendancePeriodCache(academicYear,semester);
+  if(cache.promise){const changed=await cache.promise;return force?(await syncAttendanceTablePeriod(academicYear,semester,{force:true}))||changed:changed;}
+  cache.promise=(async()=>{
+    const full=force||!cache.loaded;
+    const rows=await readAttendanceTableRows(academicYear,semester,full?'':cache.lastUpdatedAt);
+    const next=full?{}:copyData(cache.attendance);
+    rows.forEach(row=>applyAttendanceTableRow(next,row));
+    const changed=!cache.loaded||!sameStateValue(cache.attendance,next);
+    cache.attendance=next;
+    cache.loaded=true;
+    if(rows.length)cache.lastUpdatedAt=rows.reduce((latest,row)=>String(row.updated_at||'')>latest?String(row.updated_at):latest,cache.lastUpdatedAt||'');
+    else if(full)cache.lastUpdatedAt='';
+    if(db?.academicYears?.[academicYear]){
+      applyAttendanceTableCacheToState(db,academicYear,semester);
+      overlayPendingAttendanceForPeriod(db,academicYear,semester);
+      if(db.activeAcademicYear===academicYear&&String(db.activeSemester)===String(semester))ensure();
+    }
+    return changed;
+  })();
+  try{return await cache.promise;}finally{cache.promise=null;}
+}
+window.ensureAttendancePeriodLoaded=(academicYear,semester)=>syncAttendanceTablePeriod(academicYear,String(semester));
+function attendanceTableRowsForBatch(batch){
+  return[...batch.values()].map(patch=>({
+    academic_year:patch.academicYear,semester:Number(patch.semester),class_id:patch.classId,
+    student_id:patch.studentId,attendance_date:patch.date,status:patch.record.status,
+    absence_type:patch.record.status==='absent'?normalizedAbsenceType(patch.record):null,
+    note:patch.record.note||'',updated_by:patch.record.updatedBy||user?.id||null,
+    updated_by_email:patch.record.updatedByEmail||user?.email||null,
+    updated_by_name:patch.record.updatedByName||user?.name||null,
+    updated_at:patch.record.updatedAt||new Date().toISOString()
+  }));
+}
+async function persistAttendanceTableBatch(batch){
+  const rows=attendanceTableRowsForBatch(batch);
+  const result=await window.neonClient.from('attendance_entries').upsert(rows,{
+    onConflict:'academic_year,semester,class_id,student_id,attendance_date'
+  }).select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at');
+  if(result.error)throw result.error;
+  (result.data||rows).forEach(row=>{
+    const cache=attendancePeriodCache(row.academic_year,String(row.semester));
+    if(cache.loaded){
+      applyAttendanceTableRow(cache.attendance,row);
+      if(String(row.updated_at||'')>cache.lastUpdatedAt)cache.lastUpdatedAt=String(row.updated_at);
+    }
+  });
+  return result.data||rows;
 }
 function isPlainStateObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
 function copyStateValue(value){return value===undefined?undefined:copyData(value);}
@@ -1790,9 +1895,10 @@ function adoptConfirmedState(confirmed,updatedAt=''){
   const localContext=currentAcademicContext();
   const localOperations=collectStateOperations(lastConfirmedState||{},db||{});
   const projected=applyStateOperations(copyData(confirmed),localOperations);
-  attendancePatches.forEach(patch=>applyAttendancePatch(projected,patch));
   behaviorMutations.forEach(mutation=>applyBehaviorMutation(projected,mutation));
   mergeDurableActivityState(projected);
+  applyAttendanceTableCacheToState(projected,localContext.academicYear,localContext.semester);
+  attendancePatches.forEach(patch=>applyAttendancePatch(projected,patch));
   lastConfirmedState=copyData(confirmed);
   lastServerUpdatedAt=updatedAt||lastServerUpdatedAt;
   db=projected;
@@ -1951,11 +2057,12 @@ async function load(){
   ensureAcademicModel();
   mergeDurableActivityState(db);
   restoreAcademicContext();
+  await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester),{force:true});
   hydrateActiveAcademicData();
   if(applyWhatsAppNotificationDefault())save();
 }
 
-function applyRemoteAcademicState(remote){
+async function applyRemoteAcademicState(remote){
   if(!remote?.academicYears)return;
   const localContext=currentAcademicContext();
   lastConfirmedState=copyData(remote);
@@ -1965,6 +2072,7 @@ function applyRemoteAcademicState(remote){
   ensureAcademicModel();
   mergeDurableActivityState(db);
   applyAcademicContext(localContext);
+  await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester),{force:true});
   hydrateActiveAcademicData();
   rememberAcademicContext();
   if(applyWhatsAppNotificationDefault())save();
@@ -2023,14 +2131,24 @@ async function pollSharedState(force=false){
   if(!user||!window.neonClient||document.hidden||liveSyncInFlight||hasUnsavedChanges())return;
   liveSyncInFlight=true;
   try{
+    const attendanceChanged=await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester),{force});
     const meta=await readSharedState('updated_at,updated_by');
-    if(meta.updated_at===lastServerUpdatedAt){if(force)await refreshAuthenticatedUserProfile();return;}
+    if(meta.updated_at===lastServerUpdatedAt){
+      if(force)await refreshAuthenticatedUserProfile();
+      if(attendanceChanged){
+        renderDashboard();
+        if(document.getElementById('page-attendance')?.classList.contains('active')&&document.getElementById('attClass')?.value)loadAttTable();
+        if(document.getElementById('page-reports')?.classList.contains('active'))window.refreshActiveAttendanceReport?.();
+        if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
+      }
+      return;
+    }
     const latest=await readSharedState();
     if(hasUnsavedChanges())return;
     if(!(await refreshAuthenticatedUserProfile()))return;
     if(hasUnsavedChanges())return;
     lastServerUpdatedAt=latest.updated_at||'';
-    applyRemoteAcademicState(latest.data);
+    await applyRemoteAcademicState(latest.data);
     refreshSaveIndicator();
   }catch(e){}finally{liveSyncInFlight=false;}
 }
@@ -2331,6 +2449,7 @@ async function changeAcademicYear(year){
   syncActiveAcademicData();
   db.activeAcademicYear=year;
   db.activeSemester='1';
+  await syncAttendanceTablePeriod(db.activeAcademicYear,'1');
   hydrateActiveAcademicData();
   rememberAcademicContext();
   refreshAcademicViews();
@@ -2343,6 +2462,7 @@ async function changeSemester(semester){
   if(!(await ensureSavedBeforeNavigation())){renderAcademicControls();return;}
   syncActiveAcademicData();
   db.activeSemester=semester;
+  await syncAttendanceTablePeriod(db.activeAcademicYear,semester);
   hydrateActiveAcademicData();
   rememberAcademicContext();
   refreshAcademicViews();
@@ -2637,10 +2757,15 @@ async function flushAttendancePatches({throwOnError=false}={}){
   const batch=new Map(attendancePatches);
   batch.forEach((value,key)=>{if(attendancePatches.get(key)===value)attendancePatches.delete(key);});
   refreshSaveIndicator();
-  attendanceFlushPromise=commitSharedStateMutation(state=>{
-    batch.forEach(patch=>applyAttendancePatch(state,patch));
-    return state;
-  },confirmed=>attendanceBatchSaved(confirmed,batch));
+  attendanceFlushPromise=(async()=>{
+    await persistAttendanceTableBatch(batch);
+    applyAttendanceTableCacheToState(db,db.activeAcademicYear,String(db.activeSemester));
+    overlayPendingAttendanceForPeriod(db,db.activeAcademicYear,String(db.activeSemester));
+    return commitSharedStateMutation(state=>{
+      batch.forEach(patch=>applyAttendancePatch(state,patch));
+      return state;
+    },confirmed=>attendanceBatchSaved(confirmed,batch));
+  })();
   try{
     await attendanceFlushPromise;
     attendanceSaveError=null;
@@ -3942,14 +4067,32 @@ function doImport(){
 // ════════════════════════════════════════════
 // SETTINGS
 // ════════════════════════════════════════════
-function resetAllData(){
+async function resetAllData(){
   if(!hasPermission('settings'))return;
   if(!confirm(t('confirmReset')))return;
-  db.attendance={};
-  Object.keys(db.classes||{}).forEach(id=>{db.attendance[id]={};});
-  db.notifications=[];
-  save(); refreshAcademicViews();
-  toast(LANG==='ar'?'🗑️ تم مسح سجلات الفصل الحالي':'🗑️ Current semester attendance cleared');
+  try{
+    if(!(await ensureSavedBeforeNavigation()))return;
+    const academicYear=db.activeAcademicYear,semester=String(db.activeSemester);
+    const deleted=await window.neonClient.from('attendance_entries').delete()
+      .eq('academic_year',academicYear).eq('semester',Number(semester));
+    if(deleted.error)throw deleted.error;
+    const cache=attendancePeriodCache(academicYear,semester);
+    cache.loaded=true;cache.attendance={};cache.lastUpdatedAt='';
+    await commitSharedStateMutation(state=>{
+      const sem=sharedSemester(state,academicYear,semester);
+      sem.attendance={};sem.notifications=[];
+      const durable=durableAttendanceSemester(state,academicYear,semester);
+      Object.keys(durable).forEach(key=>delete durable[key]);
+      if(state.activeAcademicYear===academicYear&&String(state.activeSemester)===semester){state.attendance={};state.notifications=[];}
+      return state;
+    },state=>countAttendanceRecords(state?.academicYears?.[academicYear]?.semesters?.[semester]?.attendance)===0);
+    db.attendance={};Object.keys(db.classes||{}).forEach(id=>{db.attendance[id]={};});db.notifications=[];
+    refreshAcademicViews();
+    toast(LANG==='ar'?'🗑️ تم مسح سجلات الفصل الحالي':'🗑️ Current semester attendance cleared');
+  }catch(error){
+    attendanceSaveError=error;refreshSaveIndicator();
+    toast(LANG==='ar'?'❌ تعذر مسح سجلات الفصل':'❌ Could not clear the semester attendance');
+  }
 }
 
 // ════════════════════════════════════════════
