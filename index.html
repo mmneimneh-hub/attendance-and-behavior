@@ -1305,6 +1305,7 @@ const DEFAULT_SCHOOL_NAMES = {ar:'مدارس نجد الأهلية',en:'Najd Nat
 const PROGRAMS = ['national','international'];
 const GRADE_LEVELS = ['4','5','6','7','8','9','10','11','12'];
 const PROGRAM_GRADE_PERMISSION_KEY = '__programGrades';
+const ACADEMIC_CONTEXT_STORAGE_PREFIX = 'najd_academic_context';
 const USER_SECTIONS = ['dashboard','attendance','students_edit','classes','teachers','reports','notifications','behavior_dashboard','behavior_record','behavior_manage','behavior_reports','behavior_reference','permissions','settings'];
 let db = {classes:{},students:{},teachers:{},attendance:{},notifications:[],academicYears:{},activeAcademicYear:DEFAULT_ACADEMIC_YEAR,activeSemester:'1',activeProgram:'national',permissions:JSON.parse(JSON.stringify(DEFAULT_PERMS)),settings:{schoolName:DEFAULT_SCHOOL_NAMES.ar,schoolNameAr:DEFAULT_SCHOOL_NAMES.ar,schoolNameEn:DEFAULT_SCHOOL_NAMES.en,schoolLogo:DEFAULT_SCHOOL_LOGO}};
 let user = null;
@@ -1312,6 +1313,27 @@ let impRows = [];
 let impPlan = null;
 
 function copyData(value){return JSON.parse(JSON.stringify(value));}
+function currentAcademicContext(){
+  return{academicYear:db.activeAcademicYear,semester:String(db.activeSemester||'1'),program:db.activeProgram};
+}
+function academicContextStorageKey(){
+  const identity=String(user?.id||user?.email||'guest').trim().toLowerCase();
+  return `${ACADEMIC_CONTEXT_STORAGE_PREFIX}:${identity}`;
+}
+function rememberAcademicContext(){
+  if(!user)return;
+  try{localStorage.setItem(academicContextStorageKey(),JSON.stringify(currentAcademicContext()));}catch(e){}
+}
+function applyAcademicContext(context){
+  if(!context)return;
+  if(db.academicYears?.[context.academicYear])db.activeAcademicYear=context.academicYear;
+  if(['1','2'].includes(String(context.semester)))db.activeSemester=String(context.semester);
+  if(allowedPrograms().includes(context.program))db.activeProgram=context.program;
+}
+function restoreAcademicContext(){
+  if(!user)return;
+  try{applyAcademicContext(JSON.parse(localStorage.getItem(academicContextStorageKey())||'null'));}catch(e){}
+}
 function normalizeSchoolSettings(){
   if(!db.settings)db.settings={};
   const legacyName=String(db.settings.schoolName||'').trim();
@@ -1475,7 +1497,6 @@ function syncActiveAcademicData(){
   const sem=year.semesters[String(db.activeSemester)];
   year.classes=copyData(db.classes||{});
   year.students=copyData(db.students||{});
-  sem.attendance=copyData(db.attendance||{});
   sem.notifications=copyData(db.notifications||[]);
 }
 function hydrateActiveAcademicData(){
@@ -1560,7 +1581,10 @@ function sameStateValue(left,right){
 function isPlainStateObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
 function copyStateValue(value){return value===undefined?undefined:copyData(value);}
 function ignoredGenericStatePath(path){
-  return /^academicYears\.[^.]+\.semesters\.[^.]+\.behavior\.(violations|positives|audit|nextViolationId|nextPositiveId)(\.|$)/.test(path.join('.'));
+  const joined=path.join('.');
+  return ['activeAcademicYear','activeSemester','activeProgram','classes','students','attendance','notifications'].includes(path[0])
+    || /^academicYears\.[^.]+\.semesters\.[^.]+\.attendance(\.|$)/.test(joined)
+    || /^academicYears\.[^.]+\.semesters\.[^.]+\.behavior\.(violations|positives|audit|nextViolationId|nextPositiveId)(\.|$)/.test(joined);
 }
 function mergeableIdCollection(left,right){
   const valid=items=>{
@@ -1649,6 +1673,7 @@ function delayedSaveError(message){
 
 function adoptConfirmedState(confirmed,updatedAt=''){
   if(!confirmed)return;
+  const localContext=currentAcademicContext();
   const localOperations=collectStateOperations(lastConfirmedState||{},db||{});
   const projected=applyStateOperations(copyData(confirmed),localOperations);
   attendancePatches.forEach(patch=>applyAttendancePatch(projected,patch));
@@ -1657,7 +1682,9 @@ function adoptConfirmedState(confirmed,updatedAt=''){
   lastServerUpdatedAt=updatedAt||lastServerUpdatedAt;
   db=projected;
   ensureAcademicModel();
+  applyAcademicContext(localContext);
   hydrateActiveAcademicData();
+  rememberAcademicContext();
 }
 
 function commitSharedStateMutation(transform,verify=null){
@@ -1807,24 +1834,22 @@ async function load(){
     }
   }
   ensureAcademicModel();
+  restoreAcademicContext();
   hydrateActiveAcademicData();
   if(applyWhatsAppNotificationDefault())save();
 }
 
 function applyRemoteAcademicState(remote){
   if(!remote?.academicYears)return;
-  const localYear=db.activeAcademicYear;
-  const localSemester=String(db.activeSemester||'1');
-  const localProgram=db.activeProgram;
+  const localContext=currentAcademicContext();
   lastConfirmedState=copyData(remote);
   db=copyData(remote);
   if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
   normalizeSchoolSettings();
-  if(db.academicYears[localYear])db.activeAcademicYear=localYear;
-  if(['1','2'].includes(localSemester))db.activeSemester=localSemester;
-  if(allowedPrograms().includes(localProgram))db.activeProgram=localProgram;
   ensureAcademicModel();
+  applyAcademicContext(localContext);
   hydrateActiveAcademicData();
+  rememberAcademicContext();
   if(applyWhatsAppNotificationDefault())save();
   renderDashboard();
   if(document.getElementById('page-attendance')?.classList.contains('active')){
@@ -2159,7 +2184,7 @@ async function changeProgram(program){
   if(!(await ensureSavedBeforeNavigation())){renderAcademicControls();return;}
   syncActiveAcademicData();
   db.activeProgram=program;
-  save();
+  rememberAcademicContext();
   refreshAcademicViews();
   toast(LANG==='ar'?`🏫 تم فتح البرنامج ${programLabel(program)}`:`🏫 ${programLabel(program)} program opened`);
 }
@@ -2188,7 +2213,7 @@ async function changeAcademicYear(year){
   db.activeAcademicYear=year;
   db.activeSemester='1';
   hydrateActiveAcademicData();
-  save();
+  rememberAcademicContext();
   refreshAcademicViews();
   toast(LANG==='ar'?`🎓 تم فتح السنة ${year}`:`🎓 Academic year ${year} opened`);
 }
@@ -2200,7 +2225,7 @@ async function changeSemester(semester){
   syncActiveAcademicData();
   db.activeSemester=semester;
   hydrateActiveAcademicData();
-  save();
+  rememberAcademicContext();
   refreshAcademicViews();
   toast(LANG==='ar'?`📘 تم فتح الفصل ${semester==='1'?'الأول':'الثاني'}`:`📘 Semester ${semester} opened`);
 }
@@ -2221,6 +2246,7 @@ function addAcademicYear(){
   db.activeAcademicYear=year;
   db.activeSemester='1';
   hydrateActiveAcademicData();
+  rememberAcademicContext();
   save();
   refreshAcademicViews();
   toast(LANG==='ar'?`✅ تمت إضافة السنة ${year}`:`✅ Academic year ${year} added`);
