@@ -1580,9 +1580,123 @@ function sameStateValue(left,right){
 }
 function isPlainStateObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
 function copyStateValue(value){return value===undefined?undefined:copyData(value);}
+function activityTimestamp(value){
+  const parsed=Date.parse(value?.updatedAt||value?.at||value?.createdAt||'');
+  return Number.isFinite(parsed)?parsed:0;
+}
+function durableEntryTimestamp(entry){return Math.max(activityTimestamp(entry),activityTimestamp(entry?.record));}
+function durableActivityRoot(state){
+  if(!isPlainStateObject(state.durableActivity))state.durableActivity={};
+  if(!isPlainStateObject(state.durableActivity.attendance))state.durableActivity.attendance={};
+  if(!isPlainStateObject(state.durableActivity.behavior))state.durableActivity.behavior={};
+  return state.durableActivity;
+}
+function durableAttendanceSemester(state,academicYear,semester){
+  const attendance=durableActivityRoot(state).attendance;
+  if(!isPlainStateObject(attendance[academicYear]))attendance[academicYear]={};
+  if(!isPlainStateObject(attendance[academicYear][semester]))attendance[academicYear][semester]={};
+  return attendance[academicYear][semester];
+}
+function durableBehaviorSemester(state,academicYear,semester){
+  const behavior=durableActivityRoot(state).behavior;
+  if(!isPlainStateObject(behavior[academicYear]))behavior[academicYear]={};
+  if(!isPlainStateObject(behavior[academicYear][semester]))behavior[academicYear][semester]={};
+  const durable=behavior[academicYear][semester];
+  ['violations','positives','audit'].forEach(key=>{if(!isPlainStateObject(durable[key]))durable[key]={};});
+  durable.nextViolationId=Math.max(Number(durable.nextViolationId)||1,1);
+  durable.nextPositiveId=Math.max(Number(durable.nextPositiveId)||1,1);
+  return durable;
+}
+function mergeDurableActivityState(state){
+  if(!isPlainStateObject(state?.durableActivity))return false;
+  let changed=false;
+  Object.entries(state.durableActivity.attendance||{}).forEach(([academicYear,semesters])=>Object.entries(semesters||{}).forEach(([semester,classes])=>{
+    const target=sharedSemester(state,academicYear,String(semester)).attendance;
+    Object.entries(classes||{}).forEach(([classId,dates])=>{
+      if(!isPlainStateObject(target[classId]))target[classId]={};
+      Object.entries(dates||{}).forEach(([date,students])=>{
+        if(!isPlainStateObject(target[classId][date]))target[classId][date]={};
+        Object.entries(students||{}).forEach(([studentId,record])=>{
+          const current=target[classId][date][studentId];
+          if(!current||activityTimestamp(record)>=activityTimestamp(current)){
+            if(!sameStateValue(current,record)){target[classId][date][studentId]=copyStateValue(record);changed=true;}
+          }
+        });
+      });
+    });
+  }));
+  Object.entries(state.durableActivity.behavior||{}).forEach(([academicYear,semesters])=>Object.entries(semesters||{}).forEach(([semester,durable])=>{
+    const target=sharedSemester(state,academicYear,String(semester)).behavior;
+    ['violations','positives'].forEach(kind=>{
+      Object.entries(durable?.[kind]||{}).forEach(([id,entry])=>{
+        const index=(target[kind]||[]).findIndex(record=>String(record?.id||'')===String(id));
+        const current=index>=0?target[kind][index]:null;
+        if(entry?.deleted){
+          if(index>=0&&durableEntryTimestamp(entry)>=activityTimestamp(current)){target[kind].splice(index,1);changed=true;}
+        }else if(entry?.record&&(!current||activityTimestamp(entry.record)>=activityTimestamp(current))){
+          if(!sameStateValue(current,entry.record)){
+            if(index>=0)target[kind][index]=copyStateValue(entry.record);else target[kind].unshift(copyStateValue(entry.record));
+            changed=true;
+          }
+        }
+      });
+    });
+    Object.values(durable?.audit||{}).forEach(audit=>{
+      if(!(target.audit||[]).some(item=>item.id===audit.id)){target.audit.push(copyStateValue(audit));changed=true;}
+    });
+    target.audit=(target.audit||[]).sort((a,b)=>String(b.at||'').localeCompare(String(a.at||''))).slice(0,300);
+    target.nextViolationId=Math.max(Number(target.nextViolationId)||1,Number(durable?.nextViolationId)||1);
+    target.nextPositiveId=Math.max(Number(target.nextPositiveId)||1,Number(durable?.nextPositiveId)||1);
+  }));
+  return changed;
+}
+function backfillDurableActivityState(state){
+  let changed=false;
+  Object.entries(state.academicYears||{}).forEach(([academicYear,year])=>Object.entries(year.semesters||{}).forEach(([semester,sem])=>{
+    const durableAttendance=durableAttendanceSemester(state,academicYear,String(semester));
+    Object.entries(sem.attendance||{}).forEach(([classId,dates])=>{
+      if(!isPlainStateObject(durableAttendance[classId]))durableAttendance[classId]={};
+      Object.entries(dates||{}).forEach(([date,students])=>{
+        if(!isPlainStateObject(durableAttendance[classId][date]))durableAttendance[classId][date]={};
+        Object.entries(students||{}).forEach(([studentId,record])=>{
+          const stored=durableAttendance[classId][date][studentId];
+          if(!stored||activityTimestamp(record)>activityTimestamp(stored)){
+            durableAttendance[classId][date][studentId]=copyStateValue(record);changed=true;
+          }
+        });
+      });
+    });
+    const durableBehavior=durableBehaviorSemester(state,academicYear,String(semester));
+    ['violations','positives'].forEach(kind=>(sem.behavior?.[kind]||[]).forEach(record=>{
+      const entry=durableBehavior[kind][record.id];
+      if(!entry||activityTimestamp(record)>durableEntryTimestamp(entry)){
+        durableBehavior[kind][record.id]={record:copyStateValue(record),deleted:false,updatedAt:record.updatedAt||record.createdAt||''};changed=true;
+      }
+    }));
+    (sem.behavior?.audit||[]).forEach(audit=>{if(!durableBehavior.audit[audit.id]){durableBehavior.audit[audit.id]=copyStateValue(audit);changed=true;}});
+    durableBehavior.nextViolationId=Math.max(Number(durableBehavior.nextViolationId)||1,Number(sem.behavior?.nextViolationId)||1);
+    durableBehavior.nextPositiveId=Math.max(Number(durableBehavior.nextPositiveId)||1,Number(sem.behavior?.nextPositiveId)||1);
+  }));
+  return changed;
+}
+function durableActivityStateIsMerged(state){
+  const projected=copyStateValue(state||{});
+  mergeDurableActivityState(projected);
+  backfillDurableActivityState(projected);
+  return sameStateValue(projected,state);
+}
+async function ensureDurableActivityState(){
+  if(!window.neonClient||!user)return;
+  await commitSharedStateMutation(state=>{
+    const before=copyStateValue(state);
+    mergeDurableActivityState(state);
+    backfillDurableActivityState(state);
+    return sameStateValue(before,state)?null:state;
+  },durableActivityStateIsMerged);
+}
 function ignoredGenericStatePath(path){
   const joined=path.join('.');
-  return ['activeAcademicYear','activeSemester','activeProgram','classes','students','attendance','notifications'].includes(path[0])
+  return ['activeAcademicYear','activeSemester','activeProgram','classes','students','attendance','notifications','durableActivity'].includes(path[0])
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.attendance(\.|$)/.test(joined)
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.behavior\.(violations|positives|audit|nextViolationId|nextPositiveId)(\.|$)/.test(joined);
 }
@@ -1678,6 +1792,7 @@ function adoptConfirmedState(confirmed,updatedAt=''){
   const projected=applyStateOperations(copyData(confirmed),localOperations);
   attendancePatches.forEach(patch=>applyAttendancePatch(projected,patch));
   behaviorMutations.forEach(mutation=>applyBehaviorMutation(projected,mutation));
+  mergeDurableActivityState(projected);
   lastConfirmedState=copyData(confirmed);
   lastServerUpdatedAt=updatedAt||lastServerUpdatedAt;
   db=projected;
@@ -1834,6 +1949,7 @@ async function load(){
     }
   }
   ensureAcademicModel();
+  mergeDurableActivityState(db);
   restoreAcademicContext();
   hydrateActiveAcademicData();
   if(applyWhatsAppNotificationDefault())save();
@@ -1847,6 +1963,7 @@ function applyRemoteAcademicState(remote){
   if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
   normalizeSchoolSettings();
   ensureAcademicModel();
+  mergeDurableActivityState(db);
   applyAcademicContext(localContext);
   hydrateActiveAcademicData();
   rememberAcademicContext();
@@ -2061,6 +2178,8 @@ async function changeOwnPassword(){
 // ════════════════════════════════════════════
 async function initApp(){
   await load();
+  try{await ensureDurableActivityState();}
+  catch(error){stateSaveError=error;console.warn('Durable activity protection could not be initialized',error);}
   window.initBehaviorModule?.();
   applyLang();
   const d=new Date();
@@ -2475,6 +2594,10 @@ function applyAttendancePatch(state,patch){
   if(!sem.attendance[patch.classId])sem.attendance[patch.classId]={};
   if(!sem.attendance[patch.classId][patch.date])sem.attendance[patch.classId][patch.date]={};
   sem.attendance[patch.classId][patch.date][patch.studentId]=copyData(patch.record);
+  const durable=durableAttendanceSemester(state,patch.academicYear,patch.semester);
+  if(!isPlainStateObject(durable[patch.classId]))durable[patch.classId]={};
+  if(!isPlainStateObject(durable[patch.classId][patch.date]))durable[patch.classId][patch.date]={};
+  durable[patch.classId][patch.date][patch.studentId]=copyData(patch.record);
   const sameNotice=item=>item.studentId===patch.studentId&&item.classId===patch.classId&&item.date===patch.date;
   if(patch.record.status==='absent'){
     if(!sem.notifications.some(sameNotice))sem.notifications.push(copyData(patch.notification||{
@@ -2494,6 +2617,8 @@ function attendanceBatchSaved(state,batch){
     const semester=state?.academicYears?.[patch.academicYear]?.semesters?.[patch.semester];
     const record=semester?.attendance?.[patch.classId]?.[patch.date]?.[patch.studentId];
     if(!sameStateValue(record,patch.record))return false;
+    const durableRecord=state?.durableActivity?.attendance?.[patch.academicYear]?.[patch.semester]?.[patch.classId]?.[patch.date]?.[patch.studentId];
+    if(!sameStateValue(durableRecord,patch.record))return false;
     const matching=(semester?.notifications||[]).filter(item=>item.studentId===patch.studentId&&item.classId===patch.classId&&item.date===patch.date);
     return patch.record.status==='absent'?matching.length>0:!matching.some(item=>item.status==='pending');
   });
@@ -2542,31 +2667,42 @@ async function flushAttendancePatches({throwOnError=false}={}){
 
 function applyBehaviorMutation(state,mutation){
   const behavior=sharedSemester(state,mutation.academicYear,mutation.semester).behavior;
+  const durable=durableBehaviorSemester(state,mutation.academicYear,mutation.semester);
   if(mutation.kind&&mutation.record){
     const list=Array.isArray(behavior[mutation.kind])?behavior[mutation.kind]:[];
     const index=list.findIndex(item=>item.id===mutation.record.id);
     if(mutation.deleted)behavior[mutation.kind]=list.filter(item=>item.id!==mutation.record.id);
     else if(index>=0){list[index]=copyData(mutation.record);behavior[mutation.kind]=list;}
     else behavior[mutation.kind]=[copyData(mutation.record),...list];
+    durable[mutation.kind][mutation.record.id]={
+      record:copyData(mutation.record),deleted:!!mutation.deleted,
+      updatedAt:mutation.updatedAt||mutation.record.updatedAt||mutation.record.createdAt||''
+    };
   }
   behavior.nextViolationId=Math.max(Number(behavior.nextViolationId)||1,Number(mutation.nextViolationId)||1);
   behavior.nextPositiveId=Math.max(Number(behavior.nextPositiveId)||1,Number(mutation.nextPositiveId)||1);
   (mutation.audits||[]).forEach(audit=>{
     behavior.audit=Array.isArray(behavior.audit)?behavior.audit:[];
     if(!behavior.audit.some(item=>item.id===audit.id))behavior.audit.unshift(copyData(audit));
+    durable.audit[audit.id]=copyData(audit);
   });
   behavior.audit=(behavior.audit||[]).slice(0,300);
+  durable.nextViolationId=Math.max(Number(durable.nextViolationId)||1,Number(mutation.nextViolationId)||1);
+  durable.nextPositiveId=Math.max(Number(durable.nextPositiveId)||1,Number(mutation.nextPositiveId)||1);
 }
 function behaviorBatchSaved(state,batch){
   return [...batch.values()].every(mutation=>{
     const behavior=state?.academicYears?.[mutation.academicYear]?.semesters?.[mutation.semester]?.behavior;
+    const durable=state?.durableActivity?.behavior?.[mutation.academicYear]?.[mutation.semester];
     if(mutation.kind&&mutation.record){
       const record=(behavior?.[mutation.kind]||[]).find(item=>item.id===mutation.record.id);
       if(mutation.deleted?!!record:!sameStateValue(record,mutation.record))return false;
+      const entry=durable?.[mutation.kind]?.[mutation.record.id];
+      if(!entry||!!entry.deleted!==!!mutation.deleted||!sameStateValue(entry.record,mutation.record))return false;
     }
     if(Number(behavior?.nextViolationId||1)<Number(mutation.nextViolationId||1))return false;
     if(Number(behavior?.nextPositiveId||1)<Number(mutation.nextPositiveId||1))return false;
-    return (mutation.audits||[]).every(audit=>(behavior?.audit||[]).some(item=>item.id===audit.id));
+    return (mutation.audits||[]).every(audit=>(behavior?.audit||[]).some(item=>item.id===audit.id)&&sameStateValue(durable?.audit?.[audit.id],audit));
   });
 }
 async function flushBehaviorMutations({throwOnError=false}={}){
@@ -2611,7 +2747,8 @@ window.persistBehaviorRecord=function(kind,record,deleted=false,auditEntry=null)
   if(auditEntry&&!audits.some(item=>item.id===auditEntry.id))audits.push(copyData(auditEntry));
   const mutation={
     academicYear:db.activeAcademicYear,semester:String(db.activeSemester),kind,record:copyData(record),deleted:!!deleted,audits,
-    nextViolationId:Number(behavior.nextViolationId)||1,nextPositiveId:Number(behavior.nextPositiveId)||1,sequence:++behaviorMutationSequence
+    nextViolationId:Number(behavior.nextViolationId)||1,nextPositiveId:Number(behavior.nextPositiveId)||1,sequence:++behaviorMutationSequence,
+    updatedAt:auditEntry?.at||record.updatedAt||record.createdAt||new Date().toISOString()
   };
   behaviorMutations.set(key,mutation);
   behaviorSaveError=null;
@@ -2627,7 +2764,8 @@ window.persistBehaviorAudit=function(auditEntry){
   const behavior=db.academicYears?.[db.activeAcademicYear]?.semesters?.[String(db.activeSemester)]?.behavior||{};
   const mutation={
     academicYear:db.activeAcademicYear,semester:String(db.activeSemester),kind:null,record:null,deleted:false,audits:[copyData(auditEntry)],
-    nextViolationId:Number(behavior.nextViolationId)||1,nextPositiveId:Number(behavior.nextPositiveId)||1,sequence:++behaviorMutationSequence
+    nextViolationId:Number(behavior.nextViolationId)||1,nextPositiveId:Number(behavior.nextPositiveId)||1,sequence:++behaviorMutationSequence,
+    updatedAt:auditEntry.at||new Date().toISOString()
   };
   behaviorMutations.set(`audit|${mutation.academicYear}|${mutation.semester}|${auditEntry.id}`,mutation);
   behaviorSaveError=null;
