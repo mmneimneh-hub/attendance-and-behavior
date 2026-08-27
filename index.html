@@ -1489,12 +1489,25 @@ function hydrateActiveAcademicData(){
   ensure();
 }
 let saveTimer=null;
+let pendingStateSave=null;
+let stateSaveInFlight=false;
+let stateSavePromise=Promise.resolve();
+let stateSaveRetryDelay=900;
+let stateSaveError=null;
 let liveSyncInterval=null;
 let liveSyncEventsBound=false;
 let lastServerUpdatedAt='';
+let lastConfirmedState=null;
 let sharedMutationChain=Promise.resolve();
 let sharedMutationInFlight=0;
 let liveSyncInFlight=false;
+let navigationSavePromise=null;
+const behaviorMutations=new Map();
+let behaviorMutationSequence=0;
+let behaviorFlushTimer=null;
+let behaviorFlushInFlight=false;
+let behaviorFlushPromise=Promise.resolve();
+let behaviorSaveError=null;
 
 function sharedStateRow(result){
   return Array.isArray(result?.data)?result.data[0]:result?.data;
@@ -1516,38 +1529,112 @@ function setLiveSaveStatus(status){
     saved:LANG==='ar'?'محفوظ ومتزامن مباشرة':'Saved & live synced',
     error:LANG==='ar'?'تعذر الحفظ — ستتم إعادة المحاولة':'Save failed — retrying'
   };
+  label.dataset.state=status;
   label.textContent=values[status]||values.saved;
   label.closest('.save-dot-w')?.style.setProperty('color',status==='error'?'var(--warning)':'');
 }
 
-function preserveLiveRecordCollections(latest,next){
-  if(!latest?.academicYears)return next;
-  if(!next.academicYears)next.academicYears={};
-  Object.entries(latest.academicYears).forEach(([yearName,latestYear])=>{
-    if(!next.academicYears[yearName]){next.academicYears[yearName]=copyData(latestYear);return;}
-    const nextYear=next.academicYears[yearName];
-    ['1','2'].forEach(semester=>{
-      const latestSemester=latestYear?.semesters?.[semester];
-      if(!latestSemester)return;
-      if(!nextYear.semesters)nextYear.semesters={};
-      if(!nextYear.semesters[semester])nextYear.semesters[semester]=copyData(latestSemester);
-      const nextSemester=nextYear.semesters[semester];
-      nextSemester.attendance=copyData(latestSemester.attendance||{});
-      const latestBehavior=latestSemester.behavior||emptyBehaviorState();
-      const nextBehavior=nextSemester.behavior||(nextSemester.behavior=emptyBehaviorState());
-      nextBehavior.violations=copyData(latestBehavior.violations||[]);
-      nextBehavior.positives=copyData(latestBehavior.positives||[]);
-      nextBehavior.audit=copyData(latestBehavior.audit||[]);
-      nextBehavior.nextViolationId=Number(latestBehavior.nextViolationId)||1;
-      nextBehavior.nextPositiveId=Number(latestBehavior.nextPositiveId)||1;
-    });
-  });
-  return next;
+function hasUnsavedChanges(){
+  return !!(saveTimer||pendingStateSave||stateSaveInFlight||sharedMutationInFlight||attendancePatches.size||attendanceFlushInFlight||behaviorMutations.size||behaviorFlushInFlight);
 }
 
-function commitSharedStateMutation(transform){
+function refreshSaveIndicator(){
+  if(stateSaveError||attendanceSaveError||behaviorSaveError)setLiveSaveStatus('error');
+  else if(hasUnsavedChanges())setLiveSaveStatus('saving');
+  else setLiveSaveStatus('saved');
+}
+
+function sameStateValue(left,right){return JSON.stringify(left)===JSON.stringify(right);}
+function isPlainStateObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
+function copyStateValue(value){return value===undefined?undefined:copyData(value);}
+function ignoredGenericStatePath(path){
+  return /^academicYears\.[^.]+\.semesters\.[^.]+\.behavior\.(violations|positives|audit|nextViolationId|nextPositiveId)(\.|$)/.test(path.join('.'));
+}
+function mergeableIdCollection(left,right){
+  const valid=items=>{
+    const ids=(items||[]).map(item=>item&&typeof item==='object'&&!Array.isArray(item)?String(item.id||''):'');
+    return ids.every(Boolean)&&new Set(ids).size===ids.length;
+  };
+  return !!((left||[]).length||(right||[]).length)&&valid(left)&&valid(right);
+}
+function collectStateOperations(base,next,path=[],operations=[]){
+  if(ignoredGenericStatePath(path))return operations;
+  if(sameStateValue(base,next))return operations;
+  if(Array.isArray(base)&&Array.isArray(next)&&mergeableIdCollection(base,next)){
+    const before=new Map(base.map(item=>[String(item.id),item]));
+    const after=new Map(next.map(item=>[String(item.id),item]));
+    before.forEach((item,id)=>{if(!after.has(id))operations.push({type:'collection-delete',path:[...path],id});});
+    after.forEach((item,id)=>{if(!before.has(id)||!sameStateValue(before.get(id),item))operations.push({type:'collection-upsert',path:[...path],id,value:copyStateValue(item)});});
+    return operations;
+  }
+  if(isPlainStateObject(base)&&isPlainStateObject(next)){
+    const keys=new Set([...Object.keys(base),...Object.keys(next)]);
+    keys.forEach(key=>{
+      if(!Object.prototype.hasOwnProperty.call(next,key))operations.push({type:'delete',path:[...path,key]});
+      else if(!Object.prototype.hasOwnProperty.call(base,key))operations.push({type:'set',path:[...path,key],value:copyStateValue(next[key])});
+      else collectStateOperations(base[key],next[key],[...path,key],operations);
+    });
+    return operations;
+  }
+  operations.push({type:'set',path:[...path],value:copyStateValue(next)});
+  return operations;
+}
+function statePathValue(state,path){return path.reduce((value,key)=>value==null?undefined:value[key],state);}
+function ensureStatePath(state,path){
+  let current=state;
+  path.forEach(key=>{if(!isPlainStateObject(current[key])&&!Array.isArray(current[key]))current[key]={};current=current[key];});
+  return current;
+}
+function applyStateOperations(latest,operations){
+  const state=copyData(latest||{});
+  operations.forEach(operation=>{
+    if(!operation.path.length){if(operation.type==='set')Object.assign(state,copyStateValue(operation.value));return;}
+    if(operation.type==='collection-upsert'||operation.type==='collection-delete'){
+      const parent=ensureStatePath(state,operation.path.slice(0,-1));
+      const key=operation.path.at(-1);
+      const collection=Array.isArray(parent[key])?parent[key]:[];
+      const index=collection.findIndex(item=>String(item?.id||'')===operation.id);
+      if(operation.type==='collection-delete'){if(index>=0)collection.splice(index,1);}
+      else if(index>=0)collection[index]=copyStateValue(operation.value);
+      else collection.push(copyStateValue(operation.value));
+      parent[key]=collection;return;
+    }
+    const parent=ensureStatePath(state,operation.path.slice(0,-1));
+    const key=operation.path.at(-1);
+    if(operation.type==='delete')delete parent[key];
+    else parent[key]=copyStateValue(operation.value);
+  });
+  return state;
+}
+function stateOperationsMatch(state,operations){
+  return operations.every(operation=>{
+    if(operation.type==='collection-upsert'||operation.type==='collection-delete'){
+      const collection=statePathValue(state,operation.path);
+      const item=Array.isArray(collection)?collection.find(entry=>String(entry?.id||'')===operation.id):undefined;
+      return operation.type==='collection-delete'?!item:sameStateValue(item,operation.value);
+    }
+    const value=statePathValue(state,operation.path);
+    return operation.type==='delete'?value===undefined:sameStateValue(value,operation.value);
+  });
+}
+
+function adoptConfirmedState(confirmed,updatedAt=''){
+  if(!confirmed)return;
+  const localOperations=collectStateOperations(lastConfirmedState||{},db||{});
+  const projected=applyStateOperations(copyData(confirmed),localOperations);
+  attendancePatches.forEach(patch=>applyAttendancePatch(projected,patch));
+  behaviorMutations.forEach(mutation=>applyBehaviorMutation(projected,mutation));
+  lastConfirmedState=copyData(confirmed);
+  lastServerUpdatedAt=updatedAt||lastServerUpdatedAt;
+  db=projected;
+  ensureAcademicModel();
+  hydrateActiveAcademicData();
+}
+
+function commitSharedStateMutation(transform,verify=null){
   const task=async()=>{
     sharedMutationInFlight++;
+    refreshSaveIndicator();
     try{
       for(let attempt=0;attempt<6;attempt++){
         const current=await readSharedState();
@@ -1557,47 +1644,107 @@ function commitSharedStateMutation(transform){
         const nextUpdatedAt=new Date(Math.max(Date.now(),previousTime+1)).toISOString();
         const result=await window.neonClient.from('school_state').update({
           data:next,updated_at:nextUpdatedAt,updated_by:user?.id||null
-        }).eq('singleton',true).eq('updated_at',current.updated_at).select('updated_at');
+        }).eq('singleton',true).eq('updated_at',current.updated_at).select('data,updated_at,updated_by');
         if(result.error)throw result.error;
         const updated=sharedStateRow(result);
-        if(updated)return updated;
+        if(updated){
+          const confirmed=updated.data||next;
+          if(verify&&!verify(confirmed))throw new Error('The saved data could not be verified.');
+          adoptConfirmedState(confirmed,updated.updated_at||nextUpdatedAt);
+          return updated;
+        }
       }
       throw new Error('The shared record changed repeatedly. Please try again.');
-    }finally{sharedMutationInFlight--;}
+    }finally{sharedMutationInFlight--;refreshSaveIndicator();}
   };
   sharedMutationChain=sharedMutationChain.then(task,task);
   return sharedMutationChain;
 }
 
-async function persistState(snapshot){
+async function persistState(pending){
   if(!window.neonClient||!user)return;
-  setLiveSaveStatus('saving');
-  await commitSharedStateMutation(latest=>preserveLiveRecordCollections(latest,copyData(snapshot)));
-  setLiveSaveStatus('saved');
+  const operations=collectStateOperations(pending.base||{},pending.snapshot||{});
+  if(!operations.length)return;
+  await commitSharedStateMutation(latest=>applyStateOperations(latest,operations),confirmed=>stateOperationsMatch(confirmed,operations));
 }
 function save(){
   if(!user||!window.neonClient)return;
   try{
     syncActiveAcademicData();
-    const snapshot=copyData(db);
+    const base=pendingStateSave?.base||copyData(lastConfirmedState||db);
+    pendingStateSave={base,snapshot:copyData(db)};
+    stateSaveError=null;
     clearTimeout(saveTimer);
-    setLiveSaveStatus('saving');
-    saveTimer=setTimeout(()=>{
-      saveTimer=null;
-      persistState(snapshot).catch(()=>{
-        setLiveSaveStatus('error');
-        toast(LANG==='ar'?'تعذر حفظ التغييرات في قاعدة البيانات':'Could not save changes to the database');
-      });
-    },350);
-  }catch(e){}
+    saveTimer=setTimeout(()=>flushStateSave(),350);
+    refreshSaveIndicator();
+  }catch(error){stateSaveError=error;refreshSaveIndicator();}
 }
+async function flushStateSave({throwOnError=false}={}){
+  clearTimeout(saveTimer);saveTimer=null;
+  if(stateSaveInFlight){
+    try{await stateSavePromise;}catch(e){}
+    if(pendingStateSave)return flushStateSave({throwOnError});
+    if(throwOnError&&stateSaveError)throw stateSaveError;
+    return;
+  }
+  if(!pendingStateSave){if(throwOnError&&stateSaveError)throw stateSaveError;refreshSaveIndicator();return;}
+  const pending=pendingStateSave;pendingStateSave=null;stateSaveInFlight=true;refreshSaveIndicator();
+  stateSavePromise=persistState(pending);
+  try{
+    await stateSavePromise;
+    stateSaveError=null;stateSaveRetryDelay=900;
+  }catch(error){
+    if(!pendingStateSave)pendingStateSave=pending;
+    stateSaveError=error;
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(()=>flushStateSave(),stateSaveRetryDelay);
+    stateSaveRetryDelay=Math.min(stateSaveRetryDelay*2,8000);
+    if(throwOnError)throw error;
+  }finally{
+    stateSaveInFlight=false;
+    if(pendingStateSave&&!saveTimer)saveTimer=setTimeout(()=>flushStateSave(),0);
+    refreshSaveIndicator();
+  }
+}
+async function flushAllPendingChanges(timeoutMs=20000){
+  const work=async()=>{
+    for(let pass=0;pass<8;pass++){
+      await flushAttendancePatches({throwOnError:true});
+      await flushBehaviorMutations({throwOnError:true});
+      await flushStateSave({throwOnError:true});
+      await sharedMutationChain;
+      if(!hasUnsavedChanges()){refreshSaveIndicator();return true;}
+    }
+    throw new Error('Changes are still waiting to be saved.');
+  };
+  let timer;
+  try{return await Promise.race([work(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Saving timed out.')),timeoutMs);})]);}
+  finally{clearTimeout(timer);}
+}
+async function ensureSavedBeforeNavigation(){
+  if(!hasUnsavedChanges())return true;
+  if(navigationSavePromise)return navigationSavePromise;
+  navigationSavePromise=(async()=>{
+    toast(LANG==='ar'?'جارٍ حفظ التغييرات قبل المتابعة...':'Saving changes before continuing...');
+    try{await flushAllPendingChanges();return true;}
+    catch(error){
+      refreshSaveIndicator();
+      toast(LANG==='ar'?'لا يمكن مغادرة الصفحة قبل حفظ التغييرات بنجاح':'You cannot leave this page until all changes are saved successfully');
+      return false;
+    }finally{navigationSavePromise=null;}
+  })();
+  return navigationSavePromise;
+}
+window.ensureSavedBeforeNavigation=ensureSavedBeforeNavigation;
+window.addEventListener('beforeunload',event=>{if(hasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
 async function load(){
   const stateResult=await window.neonClient.from('school_state').select('data,updated_at,updated_by').eq('singleton',true).limit(1);
   if(stateResult.error)throw stateResult.error;
   const row=Array.isArray(stateResult.data)?stateResult.data[0]:stateResult.data;
   if(!row||!row.data)throw new Error('Attendance state is not initialized');
   lastServerUpdatedAt=row.updated_at||'';
-  db=row.data;
+  lastConfirmedState=copyData(row.data);
+  db=copyData(row.data);
   if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
   if(db.permissions.manager&&!db.permissions.principal){db.permissions.principal=db.permissions.manager;delete db.permissions.manager;}
   normalizeSchoolSettings();
@@ -1632,7 +1779,10 @@ function applyRemoteAcademicState(remote){
   const localYear=db.activeAcademicYear;
   const localSemester=String(db.activeSemester||'1');
   const localProgram=db.activeProgram;
-  db.academicYears=copyData(remote.academicYears);
+  lastConfirmedState=copyData(remote);
+  db=copyData(remote);
+  if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
+  normalizeSchoolSettings();
   if(db.academicYears[localYear])db.activeAcademicYear=localYear;
   if(['1','2'].includes(localSemester))db.activeSemester=localSemester;
   if(allowedPrograms().includes(localProgram))db.activeProgram=localProgram;
@@ -1647,20 +1797,62 @@ function applyRemoteAcademicState(remote){
   }
   if(document.getElementById('page-reports')?.classList.contains('active'))window.refreshActiveAttendanceReport?.();
   if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
+  applySchoolBranding();
+  applyUserPermissions();
+  enforceAuthenticatedPageAccess();
   window.refreshBehaviorContext?.();
 }
 
+async function enforceAuthenticatedPageAccess(){
+  if(!user)return false;
+  applyUserPermissions();
+  if(window.currentPlatformApp==='behavior')return (await window.enforceBehaviorAccess?.())!==false;
+  const activeName=(document.querySelector('.page.active')?.id||'').replace(/^page-/,'');
+  if(!activeName||pageAllowed(activeName))return true;
+  const fallback=['dashboard','attendance','reports','notifications','students','classes','teachers','permissions','settings'].find(pageAllowed);
+  if(fallback){
+    const item=Array.from(document.querySelectorAll('#attendanceNav .ni')).find(element=>(element.getAttribute('onclick')||'').includes(`'${fallback}'`));
+    return goPage(fallback,item||null);
+  }
+  if(window.selectPlatformApp){await window.selectPlatformApp('behavior',true);return true;}
+  return false;
+}
+
+async function refreshAuthenticatedUserProfile(){
+  if(!user?.id)return true;
+  const result=await getStaffProfileWithRetry(user.id);
+  if(result?.error)return true;
+  const profile=Array.isArray(result.data)?result.data[0]:result.data;
+  if(!profile?.active){
+    toast(LANG==='ar'?'تم إيقاف هذا الحساب':'This account has been deactivated');
+    await doLogout();return false;
+  }
+  const nextUser={id:profile.user_id,email:profile.email,role:profile.role,name:profile.full_name,programs:profile.programs||PROGRAMS,gradeLevels:profile.grade_levels||GRADE_LEVELS,sectionPermissions:profile.section_permissions||{}};
+  nextUser.programGradeLevels=programGradeMap(nextUser);
+  const changed=!sameStateValue(user,nextUser);
+  user=nextUser;
+  if(changed){
+    document.getElementById('sbName').textContent=user.name;
+    document.getElementById('sbRole').textContent=t('roles')[user.role]||user.role;
+    document.querySelectorAll('.admin-only').forEach(el=>el.style.display=user.role==='admin'?'':'none');
+    await enforceAuthenticatedPageAccess();
+  }
+  return true;
+}
+
 async function pollSharedState(force=false){
-  if(!user||!window.neonClient||document.hidden||liveSyncInFlight||sharedMutationInFlight||saveTimer||attendancePatches.size)return;
+  if(!user||!window.neonClient||document.hidden||liveSyncInFlight||hasUnsavedChanges())return;
   liveSyncInFlight=true;
   try{
     const meta=await readSharedState('updated_at,updated_by');
-    if(!force&&meta.updated_at===lastServerUpdatedAt)return;
-    if(meta.updated_at===lastServerUpdatedAt)return;
+    if(meta.updated_at===lastServerUpdatedAt){if(force)await refreshAuthenticatedUserProfile();return;}
     const latest=await readSharedState();
+    if(hasUnsavedChanges())return;
+    if(!(await refreshAuthenticatedUserProfile()))return;
+    if(hasUnsavedChanges())return;
     lastServerUpdatedAt=latest.updated_at||'';
     applyRemoteAcademicState(latest.data);
-    setLiveSaveStatus('saved');
+    refreshSaveIndicator();
   }catch(e){}finally{liveSyncInFlight=false;}
 }
 
@@ -1753,17 +1945,25 @@ async function doLogin(){
 }
 
 async function doLogout(){
+  if(user&&!(await ensureSavedBeforeNavigation()))return false;
   try{
     clearInterval(liveSyncInterval);
+    clearTimeout(saveTimer);
     clearTimeout(attendanceFlushTimer);
-    if(user){await flushAttendancePatches();await sharedMutationChain;}
-    await window.neonClient.auth.signOut();
-  }catch(e){}
+    clearTimeout(behaviorFlushTimer);
+    const result=await window.neonClient.auth.signOut();
+    if(result?.error)throw result.error;
+  }catch(e){
+    startLiveSync();
+    toast(LANG==='ar'?'تعذر تسجيل الخروج. حاول مرة أخرى.':'Sign out failed. Please try again.');
+    return false;
+  }
   localStorage.removeItem('najd_attendance_session');
   user=null;
   const chooser=document.getElementById('appChooser');if(chooser)chooser.style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('loginPage').style.display='flex';
+  return true;
 }
 
 async function changeOwnPassword(){
@@ -1917,8 +2117,9 @@ function renderAcademicControls(){
   }).join('');
 }
 
-function changeProgram(program){
+async function changeProgram(program){
   if(!allowedPrograms().includes(program)||program===db.activeProgram){renderAcademicControls();return;}
+  if(!(await ensureSavedBeforeNavigation())){renderAcademicControls();return;}
   syncActiveAcademicData();
   db.activeProgram=program;
   save();
@@ -1943,8 +2144,9 @@ function refreshAcademicViews(){
   window.refreshBehaviorContext?.();
 }
 
-function changeAcademicYear(year){
+async function changeAcademicYear(year){
   if(!db.academicYears[year]||year===db.activeAcademicYear){renderAcademicControls();return;}
+  if(!(await ensureSavedBeforeNavigation())){renderAcademicControls();return;}
   syncActiveAcademicData();
   db.activeAcademicYear=year;
   db.activeSemester='1';
@@ -1954,9 +2156,10 @@ function changeAcademicYear(year){
   toast(LANG==='ar'?`🎓 تم فتح السنة ${year}`:`🎓 Academic year ${year} opened`);
 }
 
-function changeSemester(semester){
+async function changeSemester(semester){
   semester=String(semester);
   if(!['1','2'].includes(semester)||semester===String(db.activeSemester)){renderAcademicControls();return;}
+  if(!(await ensureSavedBeforeNavigation())){renderAcademicControls();return;}
   syncActiveAcademicData();
   db.activeSemester=semester;
   hydrateActiveAcademicData();
@@ -2044,8 +2247,9 @@ function applyUserPermissions(){
   window.applyBehaviorPermissions?.();
 }
 
-function goPage(name,el){
-  if(!pageAllowed(name)){toast(LANG==='ar'?'لا تملك صلاحية لهذه الصفحة':'You do not have permission for this page');return;}
+async function goPage(name,el){
+  if(!pageAllowed(name)){toast(LANG==='ar'?'لا تملك صلاحية لهذه الصفحة':'You do not have permission for this page');return false;}
+  if(!(await ensureSavedBeforeNavigation()))return false;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>{n.classList.remove('active');n.removeAttribute('aria-current');});
   document.getElementById('page-'+name).classList.add('active');
@@ -2060,11 +2264,12 @@ function goPage(name,el){
   if(name==='settings'){applySchoolBranding();renderAcademicControls();}
   // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
+  return true;
 }
 
 function goToDashboard(){
   const el = document.querySelector('.ni[onclick*="dashboard"]');
-  goPage('dashboard', el);
+  return goPage('dashboard', el);
 }
 
 // ════════════════════════════════════════════
@@ -2168,6 +2373,8 @@ function attendanceAttribution(){
 const attendancePatches=new Map();
 let attendanceFlushTimer=null;
 let attendanceFlushInFlight=false;
+let attendanceFlushPromise=Promise.resolve();
+let attendanceSaveError=null;
 
 function queueAttendancePatch(classId,date,studentId,record){
   if(!user||!classId||!date||!studentId)return;
@@ -2177,7 +2384,8 @@ function queueAttendancePatch(classId,date,studentId,record){
     record:copyData(record),notification:notice?copyData(notice):null
   };
   attendancePatches.set([patch.academicYear,patch.semester,classId,date,studentId].join('|'),patch);
-  setLiveSaveStatus('saving');
+  attendanceSaveError=null;
+  refreshSaveIndicator();
   clearTimeout(attendanceFlushTimer);
   attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),180);
 }
@@ -2214,63 +2422,143 @@ function applyAttendancePatch(state,patch){
   }
 }
 
-async function flushAttendancePatches(){
+function attendanceBatchSaved(state,batch){
+  return [...batch.values()].every(patch=>{
+    const semester=state?.academicYears?.[patch.academicYear]?.semesters?.[patch.semester];
+    const record=semester?.attendance?.[patch.classId]?.[patch.date]?.[patch.studentId];
+    if(!sameStateValue(record,patch.record))return false;
+    const matching=(semester?.notifications||[]).filter(item=>item.studentId===patch.studentId&&item.classId===patch.classId&&item.date===patch.date);
+    return patch.record.status==='absent'?matching.length>0:!matching.some(item=>item.status==='pending');
+  });
+}
+
+async function flushAttendancePatches({throwOnError=false}={}){
   clearTimeout(attendanceFlushTimer);attendanceFlushTimer=null;
-  if(attendanceFlushInFlight||!attendancePatches.size||!user)return;
+  if(attendanceFlushInFlight){
+    try{await attendanceFlushPromise;}catch(e){}
+    if(attendancePatches.size)return flushAttendancePatches({throwOnError});
+    if(throwOnError&&attendanceSaveError)throw attendanceSaveError;
+    return;
+  }
+  if(!attendancePatches.size||!user){if(throwOnError&&attendanceSaveError)throw attendanceSaveError;refreshSaveIndicator();return;}
   attendanceFlushInFlight=true;
   const batch=new Map(attendancePatches);
   batch.forEach((value,key)=>{if(attendancePatches.get(key)===value)attendancePatches.delete(key);});
-  setLiveSaveStatus('saving');
+  refreshSaveIndicator();
+  attendanceFlushPromise=commitSharedStateMutation(state=>{
+    batch.forEach(patch=>applyAttendancePatch(state,patch));
+    return state;
+  },confirmed=>attendanceBatchSaved(confirmed,batch));
   try{
-    await commitSharedStateMutation(state=>{
-      batch.forEach(patch=>applyAttendancePatch(state,patch));
-      return state;
-    });
-    setLiveSaveStatus('saved');
-  }catch(e){
+    await attendanceFlushPromise;
+    attendanceSaveError=null;
+  }catch(error){
     batch.forEach((patch,key)=>{if(!attendancePatches.has(key))attendancePatches.set(key,patch);});
-    setLiveSaveStatus('error');
+    attendanceSaveError=error;
     toast(LANG==='ar'?'تعذر الحفظ المباشر — ستتم إعادة المحاولة تلقائياً':'Live save failed — retrying automatically');
+    if(throwOnError)throw error;
   }finally{
     attendanceFlushInFlight=false;
     if(attendancePatches.size)attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),900);
+    refreshSaveIndicator();
   }
 }
 
-window.persistBehaviorRecord=function(kind,record,deleted=false,auditEntry=null,retry=0){
-  if(!user||!['violations','positives'].includes(kind)||!record?.id)return Promise.resolve();
-  const academicYear=db.activeAcademicYear;
-  const semester=String(db.activeSemester);
-  const storedRecord=copyData(record);
-  const storedAudit=auditEntry?copyData(auditEntry):null;
-  syncActiveAcademicData();
-  setLiveSaveStatus('saving');
-  return commitSharedStateMutation(state=>{
-    const behavior=sharedSemester(state,academicYear,semester).behavior;
-    const list=Array.isArray(behavior[kind])?behavior[kind]:[];
-    const index=list.findIndex(item=>item.id===storedRecord.id);
-    if(deleted){
-      behavior[kind]=list.filter(item=>item.id!==storedRecord.id);
-    }else if(index>=0){
-      list[index]=copyData(storedRecord);behavior[kind]=list;
-    }else{
-      behavior[kind]=[copyData(storedRecord),...list];
-    }
-    if(storedAudit){
-      behavior.audit=Array.isArray(behavior.audit)?behavior.audit:[];
-      if(!behavior.audit.some(item=>item.id===storedAudit.id))behavior.audit.unshift(copyData(storedAudit));
-      behavior.audit=behavior.audit.slice(0,300);
-    }
-    return state;
-  }).then(result=>{setLiveSaveStatus('saved');return result;}).catch(error=>{
-    setLiveSaveStatus('error');
-    if(retry<3){
-      setTimeout(()=>window.persistBehaviorRecord(kind,storedRecord,deleted,storedAudit,retry+1),900*(retry+1));
-      return;
-    }
-    toast(LANG==='ar'?'تعذر حفظ سجل السلوك في قاعدة البيانات':'Could not save the behavior record to the database');
-    return undefined;
+function applyBehaviorMutation(state,mutation){
+  const behavior=sharedSemester(state,mutation.academicYear,mutation.semester).behavior;
+  if(mutation.kind&&mutation.record){
+    const list=Array.isArray(behavior[mutation.kind])?behavior[mutation.kind]:[];
+    const index=list.findIndex(item=>item.id===mutation.record.id);
+    if(mutation.deleted)behavior[mutation.kind]=list.filter(item=>item.id!==mutation.record.id);
+    else if(index>=0){list[index]=copyData(mutation.record);behavior[mutation.kind]=list;}
+    else behavior[mutation.kind]=[copyData(mutation.record),...list];
+  }
+  behavior.nextViolationId=Math.max(Number(behavior.nextViolationId)||1,Number(mutation.nextViolationId)||1);
+  behavior.nextPositiveId=Math.max(Number(behavior.nextPositiveId)||1,Number(mutation.nextPositiveId)||1);
+  (mutation.audits||[]).forEach(audit=>{
+    behavior.audit=Array.isArray(behavior.audit)?behavior.audit:[];
+    if(!behavior.audit.some(item=>item.id===audit.id))behavior.audit.unshift(copyData(audit));
   });
+  behavior.audit=(behavior.audit||[]).slice(0,300);
+}
+function behaviorBatchSaved(state,batch){
+  return [...batch.values()].every(mutation=>{
+    const behavior=state?.academicYears?.[mutation.academicYear]?.semesters?.[mutation.semester]?.behavior;
+    if(mutation.kind&&mutation.record){
+      const record=(behavior?.[mutation.kind]||[]).find(item=>item.id===mutation.record.id);
+      if(mutation.deleted?!!record:!sameStateValue(record,mutation.record))return false;
+    }
+    if(Number(behavior?.nextViolationId||1)<Number(mutation.nextViolationId||1))return false;
+    if(Number(behavior?.nextPositiveId||1)<Number(mutation.nextPositiveId||1))return false;
+    return (mutation.audits||[]).every(audit=>(behavior?.audit||[]).some(item=>item.id===audit.id));
+  });
+}
+async function flushBehaviorMutations({throwOnError=false}={}){
+  clearTimeout(behaviorFlushTimer);behaviorFlushTimer=null;
+  if(behaviorFlushInFlight){
+    try{await behaviorFlushPromise;}catch(e){}
+    if(behaviorMutations.size)return flushBehaviorMutations({throwOnError});
+    if(throwOnError&&behaviorSaveError)throw behaviorSaveError;
+    return;
+  }
+  if(!behaviorMutations.size||!user){if(throwOnError&&behaviorSaveError)throw behaviorSaveError;refreshSaveIndicator();return;}
+  behaviorFlushInFlight=true;
+  const batch=new Map(behaviorMutations);
+  batch.forEach((value,key)=>{if(behaviorMutations.get(key)===value)behaviorMutations.delete(key);});
+  refreshSaveIndicator();
+  behaviorFlushPromise=commitSharedStateMutation(state=>{
+    batch.forEach(mutation=>applyBehaviorMutation(state,mutation));
+    return state;
+  },confirmed=>behaviorBatchSaved(confirmed,batch));
+  try{
+    await behaviorFlushPromise;
+    behaviorSaveError=null;
+  }catch(error){
+    batch.forEach((mutation,key)=>{if(!behaviorMutations.has(key))behaviorMutations.set(key,mutation);});
+    behaviorSaveError=error;
+    toast(LANG==='ar'?'تعذر حفظ سجل السلوك — ستتم إعادة المحاولة تلقائياً':'Behavior save failed — retrying automatically');
+    if(throwOnError)throw error;
+  }finally{
+    behaviorFlushInFlight=false;
+    if(behaviorMutations.size)behaviorFlushTimer=setTimeout(()=>flushBehaviorMutations(),1200);
+    refreshSaveIndicator();
+  }
+}
+
+window.persistBehaviorRecord=function(kind,record,deleted=false,auditEntry=null){
+  if(!user||!['violations','positives'].includes(kind)||!record?.id)return Promise.resolve();
+  syncActiveAcademicData();
+  const behavior=db.academicYears?.[db.activeAcademicYear]?.semesters?.[String(db.activeSemester)]?.behavior||{};
+  const key=[db.activeAcademicYear,String(db.activeSemester),kind,record.id].join('|');
+  const queued=behaviorMutations.get(key);
+  const audits=[...(queued?.audits||[])];
+  if(auditEntry&&!audits.some(item=>item.id===auditEntry.id))audits.push(copyData(auditEntry));
+  const mutation={
+    academicYear:db.activeAcademicYear,semester:String(db.activeSemester),kind,record:copyData(record),deleted:!!deleted,audits,
+    nextViolationId:Number(behavior.nextViolationId)||1,nextPositiveId:Number(behavior.nextPositiveId)||1,sequence:++behaviorMutationSequence
+  };
+  behaviorMutations.set(key,mutation);
+  behaviorSaveError=null;
+  clearTimeout(behaviorFlushTimer);
+  behaviorFlushTimer=setTimeout(()=>flushBehaviorMutations(),120);
+  refreshSaveIndicator();
+  return Promise.resolve();
+};
+
+window.persistBehaviorAudit=function(auditEntry){
+  if(!user||!auditEntry?.id)return Promise.resolve();
+  syncActiveAcademicData();
+  const behavior=db.academicYears?.[db.activeAcademicYear]?.semesters?.[String(db.activeSemester)]?.behavior||{};
+  const mutation={
+    academicYear:db.activeAcademicYear,semester:String(db.activeSemester),kind:null,record:null,deleted:false,audits:[copyData(auditEntry)],
+    nextViolationId:Number(behavior.nextViolationId)||1,nextPositiveId:Number(behavior.nextPositiveId)||1,sequence:++behaviorMutationSequence
+  };
+  behaviorMutations.set(`audit|${mutation.academicYear}|${mutation.semester}|${auditEntry.id}`,mutation);
+  behaviorSaveError=null;
+  clearTimeout(behaviorFlushTimer);
+  behaviorFlushTimer=setTimeout(()=>flushBehaviorMutations(),120);
+  refreshSaveIndicator();
+  return Promise.resolve();
 };
 
 function materializeAttendanceDay(classId,date){

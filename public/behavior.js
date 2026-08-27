@@ -362,7 +362,7 @@ window.showAppChooser=function(){
   applySchoolBranding();
 };
 
-window.selectPlatformApp=function(appName,remember){
+window.selectPlatformApp=async function(appName,remember){
   if(remember!==false)remember=true;
   if(appName!=="attendance"&&appName!=="behavior")appName="attendance";
   if(appName==="behavior"&&!appHasBehavior())appName="attendance";
@@ -377,14 +377,14 @@ window.selectPlatformApp=function(appName,remember){
   updateActiveAppChip();
   if(appName==="behavior"){
     var first=document.querySelector("#behaviorNav .behavior-ni[data-behavior-permission]:not([style*='display: none'])");
-    goBehaviorPage(first&&first.getAttribute("onclick")&&first.getAttribute("onclick").indexOf("behavior-dashboard")>=0?"behavior-dashboard":firstPageAllowed(),first);
+    await goBehaviorPage(first&&first.getAttribute("onclick")&&first.getAttribute("onclick").indexOf("behavior-dashboard")>=0?"behavior-dashboard":firstPageAllowed(),first);
   }else{
     var attendanceItem=Array.from(document.querySelectorAll("#attendanceNav .ni")).find(function(el){return el.style.display!=="none"&&(el.getAttribute("onclick")||"").indexOf("goPage")>=0;});
-    if(attendanceItem){var match=(attendanceItem.getAttribute("onclick")||"").match(/goPage\('([^']+)'/);if(match)goPage(match[1],attendanceItem);}
+    if(attendanceItem){var match=(attendanceItem.getAttribute("onclick")||"").match(/goPage\('([^']+)'/);if(match)await goPage(match[1],attendanceItem);}
   }
 };
 
-window.switchPlatformApp=function(){
+window.switchPlatformApp=async function(){
   if(!user)return;
   var current=window.currentPlatformApp||"attendance";
   var target=current==="attendance"?"behavior":"attendance";
@@ -394,7 +394,8 @@ window.switchPlatformApp=function(){
   if(target==="attendance"&&!appHasAttendance()){
     toast(tr("لا تملك صلاحية لتطبيق الحضور","You do not have access to the Attendance app"));return;
   }
-  window.selectPlatformApp(target,true);
+  if(window.ensureSavedBeforeNavigation&&!(await window.ensureSavedBeforeNavigation()))return;
+  await window.selectPlatformApp(target,true);
 };
 
 function firstPageAllowed(){
@@ -415,26 +416,28 @@ function behaviorPermission(page){
 }
 function behaviorPageAllowed(page){var permission=behaviorPermission(page);return !permission||hasPermission(permission);}
 
-window.goBehaviorPage=function(page,el){
-  if(!behaviorPageAllowed(page)){toast(tr("لا تملك صلاحية لهذه الصفحة","You do not have permission for this page"));return;}
+window.goBehaviorPage=async function(page,el){
+  if(!behaviorPageAllowed(page)){toast(tr("لا تملك صلاحية لهذه الصفحة","You do not have permission for this page"));return false;}
+  if(window.ensureSavedBeforeNavigation&&!(await window.ensureSavedBeforeNavigation()))return false;
   window.currentPlatformApp="behavior";currentBehaviorPage=page;
   document.querySelectorAll(".page").forEach(function(node){node.classList.remove("active");});
   document.querySelectorAll(".ni").forEach(function(node){node.classList.remove("active");node.removeAttribute("aria-current");});
-  var target=document.getElementById("page-"+page);if(!target)return;target.classList.add("active");
+  var target=document.getElementById("page-"+page);if(!target)return false;target.classList.add("active");
   if(el){el.classList.add("active");el.setAttribute("aria-current","page");}
   document.getElementById("pageTitle").textContent={
     "behavior-dashboard":tx("dashboard"),"behavior-log":tx("log"),"behavior-records":tx("records"),"behavior-positive":tx("positive"),
     "behavior-positive-report":tx("positiveReport"),"behavior-procedures":tx("procedures"),"behavior-reference":tx("reference"),"behavior-settings":tx("settings")
   }[page]||tx("behavior");
-  renderBehaviorPage(page);document.getElementById("sidebar").classList.remove("open");
+  renderBehaviorPage(page);document.getElementById("sidebar").classList.remove("open");return true;
 };
-window.openBehaviorSharedPage=function(page,el){
-  if(!pageAllowed(page)){toast(tr("لا تملك صلاحية لهذه الصفحة","You do not have permission for this page"));return;}
-  goPage(page,el);window.currentPlatformApp="behavior";currentBehaviorPage="shared-"+page;updateActiveAppChip();
+window.openBehaviorSharedPage=async function(page,el){
+  if(!pageAllowed(page)){toast(tr("لا تملك صلاحية لهذه الصفحة","You do not have permission for this page"));return false;}
+  if(!(await goPage(page,el)))return false;
+  window.currentPlatformApp="behavior";currentBehaviorPage="shared-"+page;updateActiveAppChip();return true;
 };
-window.openBehaviorRosterImport=function(el){
+window.openBehaviorRosterImport=async function(el){
   if(!hasPermission("roster_import")){toast(tr("لا تملك صلاحية الاستيراد","You do not have import permission"));return;}
-  openBehaviorSharedPage("students",el);openM("mImport");
+  if(await openBehaviorSharedPage("students",el))openM("mImport");
 };
 
 window.applyBehaviorPermissions=function(){
@@ -444,6 +447,18 @@ window.applyBehaviorPermissions=function(){
   });
   var a=document.getElementById("attendanceChoice"),b=document.getElementById("behaviorChoice");
   if(a)a.style.display=appHasAttendance()?"flex":"none";if(b)b.style.display=appHasBehavior()?"flex":"none";
+};
+
+window.enforceBehaviorAccess=async function(){
+  window.applyBehaviorPermissions();
+  if(window.currentPlatformApp!=="behavior")return true;
+  var current=document.querySelector(".page.active");
+  var active=(current&&current.id||"").replace(/^page-/,"");
+  var allowed=active.indexOf("behavior-")===0?behaviorPageAllowed(active):pageAllowed(active);
+  if(allowed)return true;
+  if(appHasBehavior())return goBehaviorPage(firstPageAllowed(),null);
+  if(appHasAttendance()){await window.selectPlatformApp("attendance",true);return true;}
+  return false;
 };
 
 window.applyBehaviorLanguage=function(){
@@ -611,10 +626,10 @@ window.saveViolationRecord=function(){
   window.persistBehaviorRecord("violations",record,false,audit);toast(existing?tx("updated"):tx("saved"));resetViolationForm();renderBehaviorDashboard();renderBehaviorRecords();
 };
 
-window.editViolationRecord=function(id){
+window.editViolationRecord=async function(id){
   if(!hasPermission("behavior_manage"))return;
   var record=bstate().violations.find(function(r){return r.id===id;});if(!record||!allowedBehaviorRecord(record))return;
-  goBehaviorPage("behavior-log",document.querySelector("#behaviorNav [onclick*='behavior-log']"));
+  if(!(await goBehaviorPage("behavior-log",document.querySelector("#behaviorNav [onclick*='behavior-log']"))))return;
   document.getElementById("behViolationId").value=record.id;document.getElementById("behViolationDate").value=record.date||todayValue();
   document.getElementById("behViolationClass").value=record.classId||"";fillBehaviorStudents("violation",record.studentId);
   document.getElementById("behViolationStudent").value=record.studentId||"";document.getElementById("behViolationLevel").value=record.vlevel||"";
@@ -677,9 +692,9 @@ window.savePositiveRecord=function(){
   if(existing)Object.assign(existing,record);else st.positives.unshift(record);
   var audit=addAudit(existing?"update-positive":"create-positive",record.id,studentDisplay(studentId));window.persistBehaviorRecord("positives",record,false,audit);toast(existing?tx("updated"):tx("saved"));resetPositiveForm();renderPositiveReport();renderBehaviorDashboard();
 };
-window.editPositiveRecord=function(id){
+window.editPositiveRecord=async function(id){
   if(!hasPermission("behavior_manage"))return;var r=bstate().positives.find(function(x){return x.id===id;});if(!r||!allowedBehaviorRecord(r))return;
-  goBehaviorPage("behavior-positive",document.querySelector("#behaviorNav [onclick*='behavior-positive']"));
+  if(!(await goBehaviorPage("behavior-positive",document.querySelector("#behaviorNav [onclick*='behavior-positive']"))))return;
   document.getElementById("behPositiveId").value=r.id;document.getElementById("behPositiveDate").value=r.date||todayValue();document.getElementById("behPositiveClass").value=r.classId||"";
   fillBehaviorStudents("positive",r.studentId);document.getElementById("behPositiveStudent").value=r.studentId||"";document.getElementById("behPositiveType").value=r.behaviorTypeKey||r.behaviorType||"";
   document.getElementById("behPositivePoints").value=String(r.points||"");document.getElementById("behPositiveReward").value=r.rewardTypeKey||r.rewardType||"";
@@ -827,17 +842,17 @@ window.renderBehaviorSettings=function(){
 };
 window.addBehaviorResponsible=function(){
   if(!hasPermission("settings"))return;var ar=document.getElementById("behResponsibleAr").value.trim(),en=document.getElementById("behResponsibleEn").value.trim();if(!ar||!en){toast(tx("required"));return;}
-  settings().responsibles.push({id:"resp-"+Date.now(),ar:ar,en:en});document.getElementById("behResponsibleAr").value="";document.getElementById("behResponsibleEn").value="";addAudit("settings","responsibles",ar);save();fillBehaviorSelectors();renderBehaviorSettings();
+  settings().responsibles.push({id:"resp-"+Date.now(),ar:ar,en:en});document.getElementById("behResponsibleAr").value="";document.getElementById("behResponsibleEn").value="";var audit=addAudit("settings","responsibles",ar);window.persistBehaviorAudit(audit);save();fillBehaviorSelectors();renderBehaviorSettings();
 };
 window.deleteBehaviorResponsible=function(id){
-  if(!hasPermission("settings"))return;settings().responsibles=settings().responsibles.filter(function(r){return r.id!==id;});addAudit("settings","responsibles",id);save();fillBehaviorSelectors();renderBehaviorSettings();
+  if(!hasPermission("settings"))return;settings().responsibles=settings().responsibles.filter(function(r){return r.id!==id;});var audit=addAudit("settings","responsibles",id);window.persistBehaviorAudit(audit);save();fillBehaviorSelectors();renderBehaviorSettings();
 };
 window.addBehaviorProcedure=function(){
   if(!hasPermission("settings"))return;var ar=document.getElementById("behProcedureAr").value.trim(),en=document.getElementById("behProcedureEn").value.trim();if(!ar||!en){toast(tx("required"));return;}
-  settings().customProcedures.push({id:"proc-"+Date.now(),ar:ar,en:en});document.getElementById("behProcedureAr").value="";document.getElementById("behProcedureEn").value="";addAudit("settings","procedures",ar);save();updateViolationCatalog();renderBehaviorSettings();
+  settings().customProcedures.push({id:"proc-"+Date.now(),ar:ar,en:en});document.getElementById("behProcedureAr").value="";document.getElementById("behProcedureEn").value="";var audit=addAudit("settings","procedures",ar);window.persistBehaviorAudit(audit);save();updateViolationCatalog();renderBehaviorSettings();
 };
 window.deleteBehaviorProcedure=function(id){
-  if(!hasPermission("settings"))return;settings().customProcedures=settings().customProcedures.filter(function(p){return p.id!==id;});addAudit("settings","procedures",id);save();updateViolationCatalog();renderBehaviorSettings();
+  if(!hasPermission("settings"))return;settings().customProcedures=settings().customProcedures.filter(function(p){return p.id!==id;});var audit=addAudit("settings","procedures",id);window.persistBehaviorAudit(audit);save();updateViolationCatalog();renderBehaviorSettings();
 };
 
 function behaviorReportRows(kind){
