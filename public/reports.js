@@ -110,13 +110,34 @@ function reportFiltersAreValid(config){
 }
 
 function reportRate(stats){
-  const total=stats.present+stats.absent+stats.tardy+stats.early;
-  return total?Math.round((stats.present+stats.tardy)/total*100):100;
+  return attendanceRateValue(stats);
+}
+
+function reportRateText(stats){
+  const rate=reportRate(stats);
+  return rate===null?'—':`${rate}%`;
 }
 
 function reportRating(stats){
+  if(reportRate(stats)===null)return LANG==='ar'?'لا توجد بيانات':'No data';
   if(stats.absent===0&&stats.tardy===0&&stats.early===0)return t('regular');
   return stats.absent<=2?t('warning'):t('critical');
+}
+
+function classDailyReportStats(cls,date){
+  const students=visibleStudents().filter(student=>student.classId===cls.id);
+  const daily=db.attendance?.[cls.id]?.[date]||{};
+  const stats={present:0,absent:0,excusedAbsence:0,unexcusedAbsence:0,tardy:0,early:0};
+  students.forEach(student=>{
+    const record=daily[student.id];if(!record)return;
+    if(record.status==='absent'){
+      stats.absent++;
+      if(normalizedAbsenceType(record)==='unexcused')stats.unexcusedAbsence++;else stats.excusedAbsence++;
+    }else if(record.status==='tardy')stats.tardy++;
+    else if(record.status==='early')stats.early++;
+    else stats.present++;
+  });
+  return{...stats,studentCount:students.length,recordedDays:attendanceStatsTotal(stats),attendanceRate:attendanceRateValue(stats)};
 }
 
 function reportMonthLabel(month,year){
@@ -153,7 +174,7 @@ function appendStudentStats(rows,classes,from,to,month,year,includeRating=false)
     rows.push([className(cls)]);rows.push(reportStudentHeader(includeRating));
     classStudents.forEach(student=>{
       const stats=getStuStats(student.id,from||null,to||null,month||null,year||null);
-      const row=[student.name,student.schoolId||'',stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,`${reportRate(stats)}%`];
+      const row=[student.name,student.schoolId||'',stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)];
       if(includeRating)row.push(reportRating(stats));
       rows.push(row);
     });
@@ -185,7 +206,7 @@ function studentReportRows(){
     [LANG==='ar'?'هاتف ولي الأمر':'Guardian Phone',student.parentPhone||''],
     [LANG==='ar'?'بريد ولي الأمر':'Guardian Email',student.parentEmail||''],[],
     [t('present'),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate',LANG==='ar'?'التقييم':'Rating'],
-    [stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,`${reportRate(stats)}%`,reportRating(stats)],[],
+    [stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats),reportRating(stats)],[],
     [t('excusedAbsence'),LANG==='ar'?'التاريخ':'Date']
   );
   if(stats.excusedAbsenceDates.length)stats.excusedAbsenceDates.forEach(date=>rows.push(['',date]));else rows.push(['','—']);
@@ -198,12 +219,9 @@ function dailyReportRows(){
   const date=document.getElementById('rDayD').value;
   const rows=reportContextRows([[LANG==='ar'?'التاريخ':'Date',date]]);
   rows.push([LANG==='ar'?'الفصل':'Class',LANG==='ar'?'الطلاب':'Students',t('present'),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate']);
-  const students=visibleStudents();
   visibleClasses().forEach(cls=>{
-    let present=0,excused=0,unexcused=0,tardy=0,early=0;const daily=db.attendance[cls.id]?.[date];
-    if(daily)Object.values(daily).forEach(record=>{if(record.status==='absent'){if(normalizedAbsenceType(record)==='unexcused')unexcused++;else excused++;}else if(record.status==='tardy')tardy++;else if(record.status==='early')early++;else present++;});
-    const total=present+excused+unexcused+tardy+early;
-    rows.push([className(cls),students.filter(student=>student.classId===cls.id).length,present,excused,unexcused,tardy,early,`${total?Math.round((present+tardy)/total*100):100}%`]);
+    const stats=classDailyReportStats(cls,date);
+    rows.push([className(cls),stats.studentCount,stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)]);
   });
   return rows;
 }

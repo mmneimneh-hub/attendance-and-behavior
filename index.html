@@ -3018,6 +3018,13 @@ async function saveAttRecord(){
 // ════════════════════════════════════════════
 // STUDENT STATS
 // ════════════════════════════════════════════
+function attendanceStatsTotal(stats){
+  return Number(stats?.present||0)+Number(stats?.absent||0)+Number(stats?.tardy||0)+Number(stats?.early||0);
+}
+function attendanceRateValue(stats){
+  const total=attendanceStatsTotal(stats);
+  return total>0?Math.round((Number(stats?.present||0)+Number(stats?.tardy||0))/total*100):null;
+}
 function getStuStats(sid,from,to,month,year){
   let p=0,a=0,ae=0,au=0,tardy=0,e=0,ad=[],aed=[],aud=[];
   const permittedClassIds=user?new Set(visibleClasses().map(cls=>cls.id)):null;
@@ -3037,7 +3044,8 @@ function getStuStats(sid,from,to,month,year){
       else if(rec.status==='early')e++;else p++;
     });
   });
-  return{present:p,absent:a,excusedAbsence:ae,unexcusedAbsence:au,tardy,early:e,absentDates:ad.sort(),excusedAbsenceDates:aed.sort(),unexcusedAbsenceDates:aud.sort()};
+  const stats={present:p,absent:a,excusedAbsence:ae,unexcusedAbsence:au,tardy,early:e};
+  return{...stats,recordedDays:attendanceStatsTotal(stats),attendanceRate:attendanceRateValue(stats),absentDates:ad.sort(),excusedAbsenceDates:aed.sort(),unexcusedAbsenceDates:aud.sort()};
 }
 
 // ════════════════════════════════════════════
@@ -3193,9 +3201,9 @@ function renderClsTable(){
     const tch=db.teachers[c.teacherId];
     const ss=visibleStudents().filter(s=>s.classId===c.id); let p=0,tot=0;
     ss.forEach(s=>{const st=getStuStats(s.id);p+=st.present+st.tardy;tot+=st.present+st.absent+st.tardy+st.early;});
-    const pct=tot>0?Math.round(p/tot*100):100;
+    const pct=tot>0?Math.round(p/tot*100):null;
     return`<tr><td><span class="badge bg-b">${c.id}</span></td><td style="font-weight:600">${className(c)}</td><td><span class="badge ${c.program==='international'?'bg-p':'bg-b'}">${programLabel(c.program)}</span></td><td><span class="badge bg-gr">${classGrade(c)}</span></td><td><span class="badge bg-gr">${cnt}</span></td><td>${tch?tch.name:'—'}</td>
-    <td><div style="font-size:.82rem;font-weight:600">${pct}%</div><div class="pb"><div class="pf ${pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div></td>
+    <td><div style="font-size:.82rem;font-weight:600">${pct===null?'—':`${pct}%`}</div><div class="pb"><div class="pf ${pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct??0}%"></div></div></td>
     <td><button class="btn btn-out btn-xs" onclick="editCls('${c.id}')">✏️</button> <button class="btn btn-r btn-xs" onclick="delCls('${c.id}')">🗑️</button></td></tr>`;
   }).join('')||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--slate-400)">${t('noData')}</td></tr>`;
 }
@@ -3459,10 +3467,10 @@ function swTab(name,btn){
 
 function rptRow(s,dates,cls,month){
   const st=getStuStats(s.id,null,null,month||null,null);
-  const tot=st.present+st.absent+st.tardy+st.early; const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):100;
-  const bc=pct>=90?'hi':pct>=70?'mi':'lo';
-  const bdg=st.absent===0&&st.tardy===0&&st.early===0?`<span class="badge bg-g">${t('regular')}</span>`:st.absent<=2?`<span class="badge bg-o">${t('warning')}</span>`:`<span class="badge bg-r">${t('critical')}</span>`;
-  return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td><div style="font-size:.81rem;font-weight:600">${pct}%</div><div class="pb"><div class="pf ${bc}" style="width:${pct}%"></div></div></td><td>${bdg}</td></tr>`;
+  const pct=reportRate(st);
+  const bc=pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo';
+  const bdg=pct===null?`<span class="badge bg-gr">${LANG==='ar'?'لا توجد بيانات':'No data'}</span>`:st.absent===0&&st.tardy===0&&st.early===0?`<span class="badge bg-g">${t('regular')}</span>`:st.absent<=2?`<span class="badge bg-o">${t('warning')}</span>`:`<span class="badge bg-r">${t('critical')}</span>`;
+  return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td><div style="font-size:.81rem;font-weight:600">${pct===null?'—':`${pct}%`}</div><div class="pb"><div class="pf ${bc}" style="width:${pct??0}%"></div></div></td><td>${bdg}</td></tr>`;
 }
 
 function renderClsRpt(){
@@ -3503,9 +3511,13 @@ function openStudentReportCard(type){
   const labels={days:['📅',LANG==='ar'?'الأيام المسجلة':'Recorded Days'],present:['✅',t('present')],excused:['✓',t('excusedAbsence')],unexcused:['!',t('unexcusedAbsence')],tardy:['⏰',t('tardy')],early:['🕐',t('earlyLeave')],rate:['📊',LANG==='ar'?'نسبة الحضور':'Attendance Rate']};
   if(!labels[type])return;
   const records=['days','rate'].includes(type)?items:items.filter(item=>dashboardRecordMatches(item.record,type));
-  const present=items.filter(item=>item.record.status==='present'||item.record.status==='tardy').length,rate=items.length?Math.round(present/items.length*100):0;
+  const present=items.filter(item=>item.record.status==='present').length;
+  const absent=items.filter(item=>item.record.status==='absent').length;
+  const tardy=items.filter(item=>item.record.status==='tardy').length;
+  const early=items.filter(item=>item.record.status==='early').length;
+  const rate=attendanceRateValue({present,absent,tardy,early});
   const period=window.__attendanceReportContext||selectedReportAcademicPeriod();
-  showDashboardDetails({icon:labels[type][0],title:`${student.name} · ${labels[type][1]}`,headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records),summary:type==='rate'?`${rate}% · ${items.length} ${LANG==='ar'?'يوماً مسجلاً':'recorded days'}`:'',scope:dashboardScopeText(period)});
+  showDashboardDetails({icon:labels[type][0],title:`${student.name} · ${labels[type][1]}`,headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records),summary:type==='rate'?`${rate===null?'—':`${rate}%`} · ${items.length} ${LANG==='ar'?'يوماً مسجلاً':'recorded days'}`:'',scope:dashboardScopeText(period)});
 }
 window.openStudentReportCard=openStudentReportCard;
 
@@ -3517,7 +3529,7 @@ function renderStuRpt(){
   if(!sid){out.innerHTML=`<div style="text-align:center;padding:20px;color:var(--slate-400)">${LANG==='ar'?'اختر طالباً':'Select a student'}</div>`;return;}
   const stu=db.students[sid]; const cls=stu?db.classes[stu.classId]:null;
   const st=getStuStats(sid,null,null,month||null,null);
-  const tot=st.present+st.absent+st.tardy+st.early; const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):0;
+  const tot=st.recordedDays; const pct=reportRate(st);
   const excusedList=st.excusedAbsenceDates.map(d=>`<span class="badge bg-o" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
   const unexcusedList=st.unexcusedAbsenceDates.map(d=>`<span class="badge bg-r" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
   out.innerHTML=`<div style="background:var(--slate-50);border-radius:var(--radius);padding:16px;margin-bottom:14px;border:1px solid var(--slate-200)">
@@ -3531,14 +3543,14 @@ function renderStuRpt(){
     ${dashboardCard('unexcused','r','!',st.unexcusedAbsence,t('unexcusedAbsence'),'openStudentReportCard','padding:12px')}
     ${dashboardCard('tardy','b','⏰',st.tardy,t('tardy'),'openStudentReportCard','padding:12px')}
     ${dashboardCard('early','o','🕐',st.early,t('earlyLeave'),'openStudentReportCard','padding:12px')}
-    ${dashboardCard('rate','p','📊',`${pct}%`,'%','openStudentReportCard','padding:12px')}
+    ${dashboardCard('rate','p','📊',pct===null?'—':`${pct}%`,'%','openStudentReportCard','padding:12px')}
   </div>
   <div style="background:var(--slate-50);border-radius:var(--radius);padding:13px;border:1px solid var(--slate-200)">
     <div style="display:flex;justify-content:space-between;margin-bottom:7px">
       <span style="font-weight:600;font-size:.85rem">${LANG==='ar'?'نسبة الحضور':'Attendance Rate'}</span>
-      <span class="badge ${pct>=90?'bg-g':pct>=70?'bg-o':'bg-r'}">${pct>=90?t('regular'):pct>=70?t('warning'):t('critical')}</span>
+      <span class="badge ${pct===null?'bg-gr':pct>=90?'bg-g':pct>=70?'bg-o':'bg-r'}">${pct===null?(LANG==='ar'?'لا توجد بيانات':'No data'):pct>=90?t('regular'):pct>=70?t('warning'):t('critical')}</span>
     </div>
-    <div class="pb" style="height:10px"><div class="pf ${pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div>
+    <div class="pb" style="height:10px"><div class="pf ${pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct??0}%"></div></div>
   </div>
   <div style="margin-top:14px"><div style="font-weight:600;font-size:.84rem;color:var(--danger);margin-bottom:7px">🗓️ ${t('absentDays')}:</div><div style="margin-bottom:7px"><strong>${t('excusedAbsence')}:</strong> ${excusedList}</div><div><strong>${t('unexcusedAbsence')}:</strong> ${unexcusedList}</div></div>`;
 }
@@ -3549,11 +3561,8 @@ function renderDayRpt(){
   if(!date){document.getElementById('dayRptOut').innerHTML='';return;}
   let rows='';
   visibleClasses().forEach(c=>{
-    let p=0,ae=0,au=0,tardy=0,e=0; const bd=db.attendance[c.id]&&db.attendance[c.id][date];
-    if(bd)Object.values(bd).forEach(r=>{if(r.status==='absent'){if(normalizedAbsenceType(r)==='unexcused')au++;else ae++;}else if(r.status==='tardy')tardy++;else if(r.status==='early')e++;else p++;});
-    const cnt=visibleStudents().filter(s=>s.classId===c.id).length;
-    const tot=p+ae+au+tardy+e; const pct=tot>0?Math.round((p+tardy)/tot*100):100;
-    rows+=`<tr><td style="font-weight:600">${className(c)}</td><td>${cnt}</td><td><span class="badge bg-g">${p}</span></td><td><span class="badge bg-o">${ae}</span></td><td><span class="badge bg-r">${au}</span></td><td><span class="badge bg-b">${tardy}</span></td><td><span class="badge bg-o">${e}</span></td><td><span style="font-weight:600">${pct}%</span><div class="pb"><div class="pf ${pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div></td></tr>`;
+    const stats=classDailyReportStats(c,date);const pct=reportRate(stats);
+    rows+=`<tr><td style="font-weight:600">${className(c)}</td><td>${stats.studentCount}</td><td><span class="badge bg-g">${stats.present}</span></td><td><span class="badge bg-o">${stats.excusedAbsence}</span></td><td><span class="badge bg-r">${stats.unexcusedAbsence}</span></td><td><span class="badge bg-b">${stats.tardy}</span></td><td><span class="badge bg-o">${stats.early}</span></td><td><span style="font-weight:600">${pct===null?'—':`${pct}%`}</span><div class="pb"><div class="pf ${pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct??0}%"></div></div></td></tr>`;
   });
   document.getElementById('dayRptOut').innerHTML=`<table><thead><tr><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${LANG==='ar'?'الطلاب':'Students'}</th><th>${t('present')}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -3570,7 +3579,7 @@ function renderPerRpt(){
     const ss=visibleStudents().filter(s=>s.classId===c.id); if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:12px 0 6px">${className(c)}</div>
     <table style="margin-bottom:14px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${t('present')}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead>
-    <tbody>${ss.map(s=>{const st=getStuStats(s.id,from,to);const tot=st.present+st.absent+st.tardy+st.early;const pct=tot>0?Math.round((st.present+st.tardy)/tot*100):100;return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct}%</td></tr>`;}).join('')}</tbody></table>`;
+    <tbody>${ss.map(s=>{const st=getStuStats(s.id,from,to);const pct=reportRate(st);return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct===null?'—':`${pct}%`}</td></tr>`;}).join('')}</tbody></table>`;
   });
   document.getElementById('perRptOut').innerHTML=html;
 }
