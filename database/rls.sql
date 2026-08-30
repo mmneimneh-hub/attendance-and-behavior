@@ -192,6 +192,11 @@ CREATE POLICY students_manage ON students
   FOR ALL TO authenticated
   USING (app_private.current_app_role() IN ('admin','principal'))
   WITH CHECK (app_private.current_app_role() IN ('admin','principal'));
+DROP POLICY IF EXISTS students_supervisor_update ON students;
+CREATE POLICY students_supervisor_update ON students
+  FOR UPDATE TO authenticated
+  USING (app_private.current_app_role() = 'supervisor')
+  WITH CHECK (app_private.current_app_role() = 'supervisor');
 
 DROP POLICY IF EXISTS attendance_read ON attendance_records;
 CREATE POLICY attendance_read ON attendance_records
@@ -208,8 +213,8 @@ CREATE POLICY notifications_read ON notifications
 DROP POLICY IF EXISTS notifications_write ON notifications;
 CREATE POLICY notifications_write ON notifications
   FOR ALL TO authenticated
-  USING (app_private.current_app_role() IN ('admin','principal','teacher'))
-  WITH CHECK (app_private.current_app_role() IN ('admin','principal','teacher'));
+  USING (app_private.current_app_role() IN ('admin','principal','teacher','supervisor'))
+  WITH CHECK (app_private.current_app_role() IN ('admin','principal','teacher','supervisor'));
 
 DROP POLICY IF EXISTS settings_read ON school_settings;
 CREATE POLICY settings_read ON school_settings
