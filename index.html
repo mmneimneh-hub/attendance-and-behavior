@@ -1611,6 +1611,7 @@ let stateSaveRetryDelay=900;
 let stateSaveError=null;
 let liveSyncInterval=null;
 let liveSyncEventsBound=false;
+let lastSharedStatePollAt=0;
 let lastServerUpdatedAt='';
 let lastConfirmedState=null;
 let sharedMutationChain=Promise.resolve();
@@ -1625,6 +1626,10 @@ let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
 let attendanceSaveRetryDelay=900;
 const attendanceTablePeriods=new Map();
+const ATTENDANCE_LIVE_SYNC_MS=4000;
+const SHARED_STATE_LIVE_SYNC_MS=12000;
+const ATTENDANCE_STATUS_SAVE_DELAY_MS=180;
+const ATTENDANCE_NOTE_SAVE_DELAY_MS=750;
 
 function sharedStateRow(result){
   return Array.isArray(result?.data)?result.data[0]:result?.data;
@@ -2169,7 +2174,7 @@ async function applyRemoteAcademicState(remote){
   ensureAcademicModel();
   mergeDurableActivityState(db);
   applyAcademicContext(localContext);
-  await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester),{force:true});
+  await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester));
   hydrateActiveAcademicData();
   rememberAcademicContext();
   const notificationDefaultsChanged=applyWhatsAppNotificationDefault();
@@ -2229,16 +2234,16 @@ async function pollSharedState(force=false){
   if(!user||!window.neonClient||document.hidden||liveSyncInFlight||hasUnsavedChanges())return;
   liveSyncInFlight=true;
   try{
-    const attendanceChanged=await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester),{force});
+    const attendanceChanged=await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester));
+    if(!force&&Date.now()-lastSharedStatePollAt<SHARED_STATE_LIVE_SYNC_MS){
+      if(attendanceChanged)refreshLiveAttendanceViews();
+      return;
+    }
+    lastSharedStatePollAt=Date.now();
     const meta=await readSharedState('updated_at,updated_by');
     if(meta.updated_at===lastServerUpdatedAt){
       if(force)await refreshAuthenticatedUserProfile();
-      if(attendanceChanged){
-        renderDashboard();
-        if(document.getElementById('page-attendance')?.classList.contains('active')&&document.getElementById('attClass')?.value)loadAttTable();
-        if(document.getElementById('page-reports')?.classList.contains('active'))window.refreshActiveAttendanceReport?.();
-        if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
-      }
+      if(attendanceChanged)refreshLiveAttendanceViews();
       return;
     }
     const latest=await readSharedState();
@@ -2251,9 +2256,16 @@ async function pollSharedState(force=false){
   }catch(e){}finally{liveSyncInFlight=false;}
 }
 
+function refreshLiveAttendanceViews(){
+  renderDashboard();
+  if(document.getElementById('page-attendance')?.classList.contains('active')&&document.getElementById('attClass')?.value)loadAttTable();
+  if(document.getElementById('page-reports')?.classList.contains('active'))window.refreshActiveAttendanceReport?.();
+  if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
+}
+
 function startLiveSync(){
   clearInterval(liveSyncInterval);
-  liveSyncInterval=setInterval(()=>pollSharedState(false),2500);
+  liveSyncInterval=setInterval(()=>pollSharedState(false),ATTENDANCE_LIVE_SYNC_MS);
   if(!liveSyncEventsBound){
     window.addEventListener('focus',()=>pollSharedState(true));
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollSharedState(true);});
@@ -2780,18 +2792,21 @@ let attendanceFlushInFlight=false;
 let attendanceFlushPromise=Promise.resolve();
 let attendanceSaveError=null;
 
-function queueAttendancePatch(classId,date,studentId,record){
+function queueAttendancePatch(classId,date,studentId,record,{requiresSharedState=true,delay=ATTENDANCE_STATUS_SAVE_DELAY_MS}={}){
   if(!user||!classId||!date||!studentId)return;
   const notice=(db.notifications||[]).find(item=>item.studentId===studentId&&item.classId===classId&&item.date===date&&item.status==='pending');
+  const key=[db.activeAcademicYear,String(db.activeSemester),classId,date,studentId].join('|');
+  const queued=attendancePatches.get(key);
   const patch={
     academicYear:db.activeAcademicYear,semester:String(db.activeSemester),classId,date,studentId,
-    record:copyData(record),notification:notice?copyData(notice):null
+    record:copyData(record),notification:notice?copyData(notice):null,
+    requiresSharedState:requiresSharedState||!!queued?.requiresSharedState
   };
-  attendancePatches.set([patch.academicYear,patch.semester,classId,date,studentId].join('|'),patch);
+  attendancePatches.set(key,patch);
   attendanceSaveError=null;
   refreshSaveIndicator();
   clearTimeout(attendanceFlushTimer);
-  attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),180);
+  attendanceFlushTimer=setTimeout(()=>flushAttendancePatches(),Math.max(0,Number(delay)||0));
 }
 
 function sharedSemester(state,academicYear,semester){
@@ -2864,10 +2879,12 @@ async function flushAttendancePatches({throwOnError=false}={}){
     await persistAttendanceTableBatch(batch);
     applyAttendanceTableCacheToState(db,db.activeAcademicYear,String(db.activeSemester));
     overlayPendingAttendanceForPeriod(db,db.activeAcademicYear,String(db.activeSemester));
+    const sharedBatch=new Map([...batch].filter(([,patch])=>patch.requiresSharedState));
+    if(!sharedBatch.size)return true;
     return commitSharedStateMutation(state=>{
-      batch.forEach(patch=>applyAttendancePatch(state,patch));
+      sharedBatch.forEach(patch=>applyAttendancePatch(state,patch));
       return state;
-    },confirmed=>attendanceBatchSaved(confirmed,batch));
+    },confirmed=>attendanceBatchSaved(confirmed,sharedBatch));
   })();
   try{
     await attendanceFlushPromise;
@@ -3075,7 +3092,7 @@ function setNote(sid,note){
   materializeAttendanceDay(cls,date);
   if(!db.attendance[cls][date][sid])db.attendance[cls][date][sid]={status:'present',note,...attendanceAttribution()};
   else db.attendance[cls][date][sid]={...db.attendance[cls][date][sid],note,...attendanceAttribution()};
-  queueAttendancePatch(cls,date,sid,db.attendance[cls][date][sid]);
+  queueAttendancePatch(cls,date,sid,db.attendance[cls][date][sid],{requiresSharedState:false,delay:ATTENDANCE_NOTE_SAVE_DELAY_MS});
 }
 
 function updAttCounters(cls,date){
@@ -3890,14 +3907,14 @@ function notificationAttendanceRecord(notification){
 function setNotificationNote(id,note){
   if(!hasPermission('notifications'))return;
   const notification=db.notifications.find(item=>item.id===id);if(!notification||!visibleClasses().some(cls=>cls.id===notification.classId))return;
-  const record=db.attendance?.[notification.classId]?.[notification.date]?.[notification.studentId];if(!record)return;
+  ensureAttRec(notification.classId,notification.date);
+  const record=db.attendance[notification.classId][notification.date][notification.studentId]||notificationAttendanceRecord(notification);
   const updated={...record,note:String(note||''),...attendanceAttribution()};
   db.attendance[notification.classId][notification.date][notification.studentId]=updated;
   notification.note=updated.note;
   notification.attendanceStatus=updated.status;
   notification.absenceType=updated.status==='absent'?normalizedAbsenceType(updated):null;
-  queueAttendancePatch(notification.classId,notification.date,notification.studentId,updated);
-  save();
+  queueAttendancePatch(notification.classId,notification.date,notification.studentId,updated,{requiresSharedState:false,delay:ATTENDANCE_NOTE_SAVE_DELAY_MS});
 }
 
 function notificationMessage(notification){
