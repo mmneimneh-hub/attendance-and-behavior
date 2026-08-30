@@ -1613,6 +1613,8 @@ let stateSaveRetryDelay=900;
 let stateSaveError=null;
 let liveSyncInterval=null;
 let liveSyncEventsBound=false;
+let lastLiveSyncActivityAt=Date.now();
+let liveSyncPaused=false;
 let lastSharedStatePollAt=0;
 let lastServerUpdatedAt='';
 let lastConfirmedState=null;
@@ -1628,8 +1630,9 @@ let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
 let attendanceSaveRetryDelay=900;
 const attendanceTablePeriods=new Map();
-const ATTENDANCE_LIVE_SYNC_MS=4000;
-const SHARED_STATE_LIVE_SYNC_MS=12000;
+const ATTENDANCE_LIVE_SYNC_MS=8000;
+const SHARED_STATE_LIVE_SYNC_MS=24000;
+const LIVE_SYNC_ACTIVITY_WINDOW_MS=120000;
 const ATTENDANCE_STATUS_SAVE_DELAY_MS=180;
 const ATTENDANCE_NOTE_SAVE_DELAY_MS=750;
 
@@ -1651,6 +1654,7 @@ function setLiveSaveStatus(status){
   const values={
     saving:LANG==='ar'?'جارٍ الحفظ والمزامنة...':'Saving & syncing...',
     saved:LANG==='ar'?'محفوظ ومتزامن مباشرة':'Saved & live synced',
+    paused:LANG==='ar'?'محفوظ · تستأنف المزامنة عند النشاط':'Saved · sync resumes on activity',
     error:LANG==='ar'?'تأخر الحفظ — ستتم إعادة المحاولة تلقائياً':'Save delayed — retrying automatically'
   };
   label.dataset.state=status;
@@ -1665,6 +1669,7 @@ function hasUnsavedChanges(){
 function refreshSaveIndicator(){
   if(stateSaveError||attendanceSaveError||behaviorSaveError)setLiveSaveStatus('error');
   else if(hasUnsavedChanges())setLiveSaveStatus('saving');
+  else if(liveSyncPaused)setLiveSaveStatus('paused');
   else setLiveSaveStatus('saved');
 }
 
@@ -2024,11 +2029,11 @@ function commitSharedStateMutation(transform,verify=null){
           const nextUpdatedAt=new Date(Math.max(Date.now(),previousTime+1)).toISOString();
           const result=await window.neonClient.from('school_state').update({
             data:next,updated_at:nextUpdatedAt,updated_by:user?.id||null
-          }).eq('singleton',true).eq('updated_at',current.updated_at).select('data,updated_at,updated_by');
+          }).eq('singleton',true).eq('updated_at',current.updated_at).select('updated_at,updated_by');
           if(result.error)throw result.error;
           const updated=sharedStateRow(result);
           if(updated){
-            const confirmed=updated.data||next;
+            const confirmed=next;
             if(verify&&!verify(confirmed))throw delayedSaveError('The saved data could not be verified yet.');
             adoptConfirmedState(confirmed,updated.updated_at||nextUpdatedAt);
             return updated;
@@ -2234,6 +2239,12 @@ async function refreshAuthenticatedUserProfile(){
 
 async function pollSharedState(force=false){
   if(!user||!window.neonClient||document.hidden||liveSyncInFlight||hasUnsavedChanges())return;
+  if(!force&&Date.now()-lastLiveSyncActivityAt>=LIVE_SYNC_ACTIVITY_WINDOW_MS){
+    liveSyncPaused=true;
+    refreshSaveIndicator();
+    return;
+  }
+  liveSyncPaused=false;
   liveSyncInFlight=true;
   try{
     const attendanceChanged=await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester));
@@ -2265,14 +2276,33 @@ function refreshLiveAttendanceViews(){
   if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
 }
 
+function resumeLiveSync(force=false){
+  const wasPaused=liveSyncPaused||Date.now()-lastLiveSyncActivityAt>=LIVE_SYNC_ACTIVITY_WINDOW_MS;
+  lastLiveSyncActivityAt=Date.now();
+  liveSyncPaused=false;
+  refreshSaveIndicator();
+  if((force||wasPaused)&&!document.hidden)void pollSharedState(true);
+}
+
 function startLiveSync(){
   clearInterval(liveSyncInterval);
+  lastLiveSyncActivityAt=Date.now();
+  liveSyncPaused=false;
   liveSyncInterval=setInterval(()=>pollSharedState(false),ATTENDANCE_LIVE_SYNC_MS);
   if(!liveSyncEventsBound){
-    window.addEventListener('focus',()=>pollSharedState(true));
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollSharedState(true);});
+    window.addEventListener('focus',()=>resumeLiveSync(true));
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden){
+        liveSyncPaused=true;
+        refreshSaveIndicator();
+      }else resumeLiveSync(true);
+    });
+    ['pointerdown','keydown','input','change'].forEach(eventName=>{
+      document.addEventListener(eventName,()=>resumeLiveSync(false),{passive:true});
+    });
     liveSyncEventsBound=true;
   }
+  refreshSaveIndicator();
 }
 function ensure(){ Object.values(db.classes||{}).forEach(normalizeClassScope);Object.keys(db.classes||{}).forEach(c=>{if(!db.attendance[c])db.attendance[c]={};}); }
 function rnd(){ return Math.random().toString(36).substr(2,9); }
