@@ -137,7 +137,7 @@ function classDailyReportStats(cls,date){
     else if(record.status==='early')stats.early++;
     else stats.present++;
   });
-  return{...stats,studentCount:students.length,recordedDays:attendanceStatsTotal(stats),attendanceRate:attendanceRateValue(stats)};
+  return{...stats,attended:attendanceCountValue(stats),studentCount:students.length,recordedDays:attendanceStatsTotal(stats),attendanceRate:attendanceRateValue(stats)};
 }
 
 function reportMonthLabel(month,year){
@@ -161,7 +161,7 @@ function reportContextRows(extra=[]){
 }
 
 function reportStudentHeader(includeRating=false){
-  const row=[LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',t('present'),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate'];
+  const row=[LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',LANG==='ar'?'حاضر بالكامل':'Present',attendanceCountLabel(),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate'];
   if(includeRating)row.push(LANG==='ar'?'التقييم':'Rating');
   return row;
 }
@@ -174,7 +174,7 @@ function appendStudentStats(rows,classes,from,to,month,year,includeRating=false)
     rows.push([className(cls)]);rows.push(reportStudentHeader(includeRating));
     classStudents.forEach(student=>{
       const stats=getStuStats(student.id,from||null,to||null,month||null,year||null);
-      const row=[student.name,student.schoolId||'',stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)];
+      const row=[student.name,student.schoolId||'',stats.present,stats.attended,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)];
       if(includeRating)row.push(reportRating(stats));
       rows.push(row);
     });
@@ -205,8 +205,8 @@ function studentReportRows(){
     [LANG==='ar'?'ولي الأمر':'Guardian',student.parent||''],
     [LANG==='ar'?'هاتف ولي الأمر':'Guardian Phone',student.parentPhone||''],
     [LANG==='ar'?'بريد ولي الأمر':'Guardian Email',student.parentEmail||''],[],
-    [t('present'),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate',LANG==='ar'?'التقييم':'Rating'],
-    [stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats),reportRating(stats)],[],
+    [LANG==='ar'?'حاضر بالكامل':'Present',attendanceCountLabel(),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate',LANG==='ar'?'التقييم':'Rating'],
+    [stats.present,stats.attended,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats),reportRating(stats)],[],
     [t('excusedAbsence'),LANG==='ar'?'التاريخ':'Date']
   );
   if(stats.excusedAbsenceDates.length)stats.excusedAbsenceDates.forEach(date=>rows.push(['',date]));else rows.push(['','—']);
@@ -218,10 +218,10 @@ function studentReportRows(){
 function dailyReportRows(){
   const date=document.getElementById('rDayD').value;
   const rows=reportContextRows([[LANG==='ar'?'التاريخ':'Date',date]]);
-  rows.push([LANG==='ar'?'الفصل':'Class',LANG==='ar'?'الطلاب':'Students',t('present'),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate']);
+  rows.push([LANG==='ar'?'الفصل':'Class',LANG==='ar'?'الطلاب':'Students',LANG==='ar'?'حاضر بالكامل':'Present',attendanceCountLabel(),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'نسبة الحضور':'Attendance Rate']);
   visibleClasses().forEach(cls=>{
     const stats=classDailyReportStats(cls,date);
-    rows.push([className(cls),stats.studentCount,stats.present,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)]);
+    rows.push([className(cls),stats.studentCount,stats.present,stats.attended,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)]);
   });
   return rows;
 }
@@ -239,12 +239,12 @@ function rangeReportRows(){
 function topAbsentReportRows(){
   const month=document.getElementById('rTopMon').value;
   const rows=reportContextRows([[LANG==='ar'?'الفترة':'Period',reportMonthLabel(month)]]);
-  rows.push(['#',LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',LANG==='ar'?'الفصل':'Class',t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'التقييم':'Rating']);
+  rows.push(['#',LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',LANG==='ar'?'الفصل':'Class',attendanceCountLabel(),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'التقييم':'Rating']);
   visibleStudents()
     .map(student=>({student,stats:getStuStats(student.id,null,null,month||null,null),cls:db.classes[student.classId]}))
     .filter(item=>item.stats.absent>0||item.stats.tardy>0||item.stats.early>0)
     .sort((a,b)=>b.stats.absent-a.stats.absent||b.stats.tardy-a.stats.tardy||b.stats.early-a.stats.early)
-    .forEach((item,index)=>rows.push([index+1,item.student.name,item.student.schoolId||'',item.cls?className(item.cls):item.student.classId,item.stats.excusedAbsence,item.stats.unexcusedAbsence,item.stats.tardy,item.stats.early,reportRating(item.stats)]));
+    .forEach((item,index)=>rows.push([index+1,item.student.name,item.student.schoolId||'',item.cls?className(item.cls):item.student.classId,item.stats.attended,item.stats.excusedAbsence,item.stats.unexcusedAbsence,item.stats.tardy,item.stats.early,reportRating(item.stats)]));
   return rows;
 }
 

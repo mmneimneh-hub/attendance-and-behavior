@@ -904,7 +904,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
             <label class="notification-filter"><span data-ar="الصف" data-en="Grade">الصف</span><select id="nfGradeF" onchange="refreshNotificationScopeFilters()"><option value="">كل الصفوف</option></select></label>
             <label class="notification-filter"><span data-ar="الفصل" data-en="Class">الفصل</span><select id="nfClsF" onchange="renderNotifTable()"><option value="">كل الفصول</option></select></label>
             <label class="notification-filter"><span data-ar="التاريخ" data-en="Date">التاريخ</span><input type="date" id="nfDateF" onchange="renderNotifTable()"></label>
-            <label class="notification-filter"><span data-ar="حالة الحضور" data-en="Attendance Status">حالة الحضور</span><select id="nfAttendanceF" onchange="renderNotifTable()"><option value="" data-ar="كل حالات الحضور" data-en="All Attendance Statuses">كل حالات الحضور</option><option value="absent" data-ar="غائب" data-en="Absent">غائب</option><option value="tardy" data-ar="متأخر" data-en="Tardy">متأخر</option><option value="early" data-ar="انصراف مبكر" data-en="Early Leave">انصراف مبكر</option></select></label>
+            <label class="notification-filter"><span data-ar="حالة الحضور" data-en="Attendance Status">حالة الحضور</span><select id="nfAttendanceF" onchange="renderNotifTable()"><option value="" data-ar="كل حالات الحضور" data-en="All Attendance Statuses">كل حالات الحضور</option><option value="attended" data-ar="مُحتسب حاضرًا" data-en="Counted as Attended">مُحتسب حاضرًا</option><option value="absent" data-ar="غائب" data-en="Absent">غائب</option><option value="tardy" data-ar="متأخر" data-en="Tardy">متأخر</option><option value="early" data-ar="انصراف مبكر" data-en="Early Leave">انصراف مبكر</option></select></label>
             <label class="notification-filter"><span data-ar="نوع الغياب" data-en="Absence Type">نوع الغياب</span><select id="nfAbsenceF" onchange="renderNotifTable()"><option value="" data-ar="كل أنواع الغياب" data-en="All Absence Types">كل أنواع الغياب</option><option value="excused" data-ar="بعذر" data-en="Excused">بعذر</option><option value="unexcused" data-ar="بدون عذر" data-en="Unexcused">بدون عذر</option></select></label>
             <label class="notification-filter"><span data-ar="وسيلة الإرسال" data-en="Send Via">وسيلة الإرسال</span><select id="nfMethodF" onchange="renderNotifTable()"><option value="" data-ar="كل الوسائل" data-en="All Methods">كل الوسائل</option><option value="WhatsApp">WhatsApp</option><option value="SMS">SMS</option><option value="Email">Email</option></select></label>
             <label class="notification-filter"><span data-ar="حالة الإرسال" data-en="Delivery Status">حالة الإرسال</span><select id="nfStatusF" onchange="renderNotifTable()"><option value="" data-ar="كل الحالات" data-en="All Statuses">كل الحالات</option><option value="pending" data-ar="معلّق" data-en="Pending">معلّق</option><option value="sent" data-ar="مُرسَل" data-en="Sent">مُرسَل</option><option value="failed" data-ar="فشل" data-en="Failed">فشل</option></select></label>
@@ -1469,6 +1469,8 @@ function emptyAcademicYear(label,classes={}){
 }
 function normalizedAbsenceType(record){return record?.absenceType==='unexcused'?'unexcused':'excused';}
 function attendanceStatusCountsAsAttended(status){return status==='present'||status==='tardy'||status==='early';}
+function attendanceCountLabel(){return LANG==='ar'?'مُحتسب حاضرًا':'Counted as Attended';}
+function attendanceCountValue(stats){return Number(stats?.present||0)+Number(stats?.tardy||0)+Number(stats?.early||0);}
 function attendanceStatusNeedsNotification(status){return status==='absent'||status==='tardy'||status==='early';}
 function attendanceNotificationSnapshot(record){
   return{attendanceStatus:record?.status||'absent',absenceType:record?.status==='absent'?normalizedAbsenceType(record):null,note:String(record?.note||'')};
@@ -3145,7 +3147,7 @@ function attendanceStatsTotal(stats){
 }
 function attendanceRateValue(stats){
   const total=attendanceStatsTotal(stats);
-  return total>0?Math.round((Number(stats?.present||0)+Number(stats?.tardy||0)+Number(stats?.early||0))/total*100):null;
+  return total>0?Math.round(attendanceCountValue(stats)/total*100):null;
 }
 function getStuStats(sid,from,to,month,year){
   let p=0,a=0,ae=0,au=0,tardy=0,e=0,ad=[],aed=[],aud=[];
@@ -3167,7 +3169,7 @@ function getStuStats(sid,from,to,month,year){
     });
   });
   const stats={present:p,absent:a,excusedAbsence:ae,unexcusedAbsence:au,tardy,early:e};
-  return{...stats,recordedDays:attendanceStatsTotal(stats),attendanceRate:attendanceRateValue(stats),absentDates:ad.sort(),excusedAbsenceDates:aed.sort(),unexcusedAbsenceDates:aud.sort()};
+  return{...stats,attended:attendanceCountValue(stats),recordedDays:attendanceStatsTotal(stats),attendanceRate:attendanceRateValue(stats),absentDates:ad.sort(),excusedAbsenceDates:aed.sort(),unexcusedAbsenceDates:aud.sort()};
 }
 
 // ════════════════════════════════════════════
@@ -3197,6 +3199,7 @@ function dashboardClassAttendanceRate(cls,students){
   return total?Math.round(present/total*100):null;
 }
 function dashboardRecordMatches(record,type){
+  if(type==='attended')return attendanceStatusCountsAsAttended(record.status);
   if(type==='excused')return record.status==='absent'&&normalizedAbsenceType(record)==='excused';
   if(type==='unexcused')return record.status==='absent'&&normalizedAbsenceType(record)==='unexcused';
   if(type==='tardy'||type==='early')return record.status===type;
@@ -3597,7 +3600,7 @@ function rptRow(s,dates,cls,month){
   const pct=reportRate(st);
   const bc=pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo';
   const bdg=pct===null?`<span class="badge bg-gr">${LANG==='ar'?'لا توجد بيانات':'No data'}</span>`:st.absent===0&&st.tardy===0&&st.early===0?`<span class="badge bg-g">${t('regular')}</span>`:st.absent<=2?`<span class="badge bg-o">${t('warning')}</span>`:`<span class="badge bg-r">${t('critical')}</span>`;
-  return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td><div style="font-size:.81rem;font-weight:600">${pct===null?'—':`${pct}%`}</div><div class="pb"><div class="pf ${bc}" style="width:${pct??0}%"></div></div></td><td>${bdg}</td></tr>`;
+  return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-g">${st.attended}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td><div style="font-size:.81rem;font-weight:600">${pct===null?'—':`${pct}%`}</div><div class="pb"><div class="pf ${bc}" style="width:${pct??0}%"></div></div></td><td>${bdg}</td></tr>`;
 }
 
 function renderClsRpt(){
@@ -3610,7 +3613,7 @@ function renderClsRpt(){
     const ss=visibleStudents().filter(s=>s.classId===c.id);
     if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:14px 0 8px;font-size:.9rem">${className(c)}</div>
-    <table style="margin-bottom:16px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حضور':'Present'}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${LANG==='ar'?'مبكر':'Early'}</th><th>%</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${ss.map(s=>rptRow(s,[],c.id,month)).join('')}</tbody></table>`;
+    <table style="margin-bottom:16px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حاضر بالكامل':'Present'}</th><th>${attendanceCountLabel()}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${LANG==='ar'?'مبكر':'Early'}</th><th>%</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${ss.map(s=>rptRow(s,[],c.id,month)).join('')}</tbody></table>`;
   });
   document.getElementById('clsRptOut').innerHTML=html||`<div style="text-align:center;padding:30px;color:var(--slate-400)">${t('noData')}</div>`;
 }
@@ -3635,7 +3638,7 @@ function openStudentReportCard(type){
     const record=byStudent?.[studentId];if(!record||month&&new Date(`${date}T00:00:00`).getMonth()+1!==Number(month))return[];
     return[{class:cls,student,record,date}];
   }));
-  const labels={days:['📅',LANG==='ar'?'الأيام المسجلة':'Recorded Days'],present:['✅',t('present')],excused:['✓',t('excusedAbsence')],unexcused:['!',t('unexcusedAbsence')],tardy:['⏰',t('tardy')],early:['🕐',t('earlyLeave')],rate:['📊',LANG==='ar'?'نسبة الحضور':'Attendance Rate']};
+  const labels={days:['📅',LANG==='ar'?'الأيام المسجلة':'Recorded Days'],present:['✅',t('present')],attended:['☑️',attendanceCountLabel()],excused:['✓',t('excusedAbsence')],unexcused:['!',t('unexcusedAbsence')],tardy:['⏰',t('tardy')],early:['🕐',t('earlyLeave')],rate:['📊',LANG==='ar'?'نسبة الحضور':'Attendance Rate']};
   if(!labels[type])return;
   const records=['days','rate'].includes(type)?items:items.filter(item=>dashboardRecordMatches(item.record,type));
   const present=items.filter(item=>item.record.status==='present').length;
@@ -3663,9 +3666,10 @@ function renderStuRpt(){
     <div style="font-size:1rem;font-weight:800;color:var(--slate-800)">${stu?stu.name:'—'}</div>
     <div style="font-size:.78rem;color:var(--slate-400);margin-top:3px">${cls?className(cls):'—'} | ${stu&&stu.parent?stu.parent:'—'} | ${stu&&stu.parentPhone?stu.parentPhone:'—'}</div>
   </div>
-  <div class="sg" style="grid-template-columns:repeat(7,1fr);margin-bottom:14px">
+  <div class="sg" style="grid-template-columns:repeat(8,1fr);margin-bottom:14px">
     ${dashboardCard('days','b','📅',tot,LANG==='ar'?'أيام':'Days','openStudentReportCard','padding:12px')}
     ${dashboardCard('present','g','✅',st.present,t('present'),'openStudentReportCard','padding:12px')}
+    ${dashboardCard('attended','g','☑️',st.attended,attendanceCountLabel(),'openStudentReportCard','padding:12px')}
     ${dashboardCard('excused','r','✓',st.excusedAbsence,t('excusedAbsence'),'openStudentReportCard','padding:12px')}
     ${dashboardCard('unexcused','r','!',st.unexcusedAbsence,t('unexcusedAbsence'),'openStudentReportCard','padding:12px')}
     ${dashboardCard('tardy','b','⏰',st.tardy,t('tardy'),'openStudentReportCard','padding:12px')}
@@ -3689,9 +3693,9 @@ function renderDayRpt(){
   let rows='';
   visibleClasses().forEach(c=>{
     const stats=classDailyReportStats(c,date);const pct=reportRate(stats);
-    rows+=`<tr><td style="font-weight:600">${className(c)}</td><td>${stats.studentCount}</td><td><span class="badge bg-g">${stats.present}</span></td><td><span class="badge bg-o">${stats.excusedAbsence}</span></td><td><span class="badge bg-r">${stats.unexcusedAbsence}</span></td><td><span class="badge bg-b">${stats.tardy}</span></td><td><span class="badge bg-o">${stats.early}</span></td><td><span style="font-weight:600">${pct===null?'—':`${pct}%`}</span><div class="pb"><div class="pf ${pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct??0}%"></div></div></td></tr>`;
+    rows+=`<tr><td style="font-weight:600">${className(c)}</td><td>${stats.studentCount}</td><td><span class="badge bg-g">${stats.present}</span></td><td><span class="badge bg-g">${stats.attended}</span></td><td><span class="badge bg-o">${stats.excusedAbsence}</span></td><td><span class="badge bg-r">${stats.unexcusedAbsence}</span></td><td><span class="badge bg-b">${stats.tardy}</span></td><td><span class="badge bg-o">${stats.early}</span></td><td><span style="font-weight:600">${pct===null?'—':`${pct}%`}</span><div class="pb"><div class="pf ${pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo'}" style="width:${pct??0}%"></div></div></td></tr>`;
   });
-  document.getElementById('dayRptOut').innerHTML=`<table><thead><tr><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${LANG==='ar'?'الطلاب':'Students'}</th><th>${t('present')}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
+  document.getElementById('dayRptOut').innerHTML=`<table><thead><tr><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${LANG==='ar'?'الطلاب':'Students'}</th><th>${LANG==='ar'?'حاضر بالكامل':'Present'}</th><th>${attendanceCountLabel()}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderPerRpt(){
@@ -3705,8 +3709,8 @@ function renderPerRpt(){
   classes.forEach(c=>{
     const ss=visibleStudents().filter(s=>s.classId===c.id); if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:12px 0 6px">${className(c)}</div>
-    <table style="margin-bottom:14px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${t('present')}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead>
-    <tbody>${ss.map(s=>{const st=getStuStats(s.id,from,to);const pct=reportRate(st);return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct===null?'—':`${pct}%`}</td></tr>`;}).join('')}</tbody></table>`;
+    <table style="margin-bottom:14px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حاضر بالكامل':'Present'}</th><th>${attendanceCountLabel()}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead>
+    <tbody>${ss.map(s=>{const st=getStuStats(s.id,from,to);const pct=reportRate(st);return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-g">${st.attended}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct===null?'—':`${pct}%`}</td></tr>`;}).join('')}</tbody></table>`;
   });
   document.getElementById('perRptOut').innerHTML=html;
 }
@@ -3714,8 +3718,8 @@ function renderPerRpt(){
 function renderTopRpt(){
   if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderTopRpt);
   const month=document.getElementById('rTopMon').value;
-  const top=visibleStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,null);const cls=db.classes[s.classId];return{...s,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence,tardy:st.tardy,early:st.early,clsName:cls?className(cls):s.classId};}).filter(s=>s.absent>0||s.tardy>0||s.early>0).sort((a,b)=>b.absent-a.absent||b.tardy-a.tardy||b.early-a.early);
-  document.getElementById('topRptOut').innerHTML=top.length?`<table><thead><tr><th>#</th><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${s.clsName}</span></td><td><span class="badge bg-r">${s.excusedAbsence}</span></td><td><span class="badge bg-r">${s.unexcusedAbsence}</span></td><td><span class="badge bg-b">${s.tardy}</span></td><td><span class="badge bg-o">${s.early}</span></td><td><span class="badge ${s.absent>=5?'bg-r':s.absent>=3?'bg-o':'bg-gr'}">${s.absent>=5?t('critical'):s.absent>=3?t('warning'):'ℹ️'}</span></td></tr>`).join('')}</tbody></table>`:`<div style="text-align:center;padding:30px;color:var(--success)">${t('noAbsent')} 🎉</div>`;
+  const top=visibleStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,null);const cls=db.classes[s.classId];return{...s,attended:st.attended,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence,tardy:st.tardy,early:st.early,clsName:cls?className(cls):s.classId};}).filter(s=>s.absent>0||s.tardy>0||s.early>0).sort((a,b)=>b.absent-a.absent||b.tardy-a.tardy||b.early-a.early);
+  document.getElementById('topRptOut').innerHTML=top.length?`<table><thead><tr><th>#</th><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${attendanceCountLabel()}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${s.clsName}</span></td><td><span class="badge bg-g">${s.attended}</span></td><td><span class="badge bg-r">${s.excusedAbsence}</span></td><td><span class="badge bg-r">${s.unexcusedAbsence}</span></td><td><span class="badge bg-b">${s.tardy}</span></td><td><span class="badge bg-o">${s.early}</span></td><td><span class="badge ${s.absent>=5?'bg-r':s.absent>=3?'bg-o':'bg-gr'}">${s.absent>=5?t('critical'):s.absent>=3?t('warning'):'ℹ️'}</span></td></tr>`).join('')}</tbody></table>`:`<div style="text-align:center;padding:30px;color:var(--success)">${t('noAbsent')} 🎉</div>`;
 }
 
 // ════════════════════════════════════════════
@@ -3761,7 +3765,8 @@ function notificationMatchesFilters(item,filters,visibleClassIds){
   if(filters.grade&&classGrade(cls)!==filters.grade)return false;
   if(filters.classId&&item.classId!==filters.classId)return false;
   if(filters.date&&item.date!==filters.date)return false;
-  if(filters.attendanceStatus&&record.status!==filters.attendanceStatus)return false;
+  if(filters.attendanceStatus==='attended'&&!attendanceStatusCountsAsAttended(record.status))return false;
+  if(filters.attendanceStatus&&filters.attendanceStatus!=='attended'&&record.status!==filters.attendanceStatus)return false;
   if(filters.absenceType&&(record.status!=='absent'||normalizedAbsenceType(record)!==filters.absenceType))return false;
   if(filters.method&&(item.method||'WhatsApp')!==filters.method)return false;
   if(filters.status&&item.status!==filters.status)return false;
@@ -3781,9 +3786,9 @@ function notificationCardItems(){
 }
 function openNotificationCard(type){
   if(!hasPermission('notifications'))return;
-  const labels={total:['🔔',LANG==='ar'?'إجمالي الإشعارات':'Total Notifications'],pending:['⏳',LANG==='ar'?'بانتظار الإرسال':'Pending'],sent:['✅',LANG==='ar'?'تم الإرسال':'Sent']};if(!labels[type])return;
-  const items=notificationCardItems().filter(item=>type==='total'||item.status===type);
-  showDashboardDetails({icon:labels[type][0],title:labels[type][1],headers:[LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'حالة الحضور':'Attendance Status',LANG==='ar'?'الملاحظة':'Note',LANG==='ar'?'الطريقة':'Method',LANG==='ar'?'حالة الإرسال':'Delivery Status',LANG==='ar'?'وقت الإرسال':'Sent At'],rows:items.map(item=>{const record=notificationAttendanceRecord(item);return[db.students?.[item.studentId]?.name||'—',className(db.classes?.[item.classId]),dashboardDisplayDate(item.date),dashboardStatusLabel(record),record.note||'—',item.method||'—',item.status==='sent'?(LANG==='ar'?'تم الإرسال':'Sent'):item.status==='failed'?(LANG==='ar'?'فشل':'Failed'):(LANG==='ar'?'بانتظار الإرسال':'Pending'),dashboardDateTime(item.sentAt)];})});
+  const labels={total:['🔔',LANG==='ar'?'إجمالي الإشعارات':'Total Notifications'],attended:['☑️',attendanceCountLabel()],pending:['⏳',LANG==='ar'?'بانتظار الإرسال':'Pending'],sent:['✅',LANG==='ar'?'تم الإرسال':'Sent']};if(!labels[type])return;
+  const items=notificationCardItems().filter(item=>type==='total'||(type==='attended'?attendanceStatusCountsAsAttended(notificationAttendanceRecord(item).status):item.status===type));
+  showDashboardDetails({icon:labels[type][0],title:labels[type][1],headers:[LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'حالة الحضور':'Attendance Status',LANG==='ar'?'احتساب الحضور':'Attendance Count',LANG==='ar'?'الملاحظة':'Note',LANG==='ar'?'الطريقة':'Method',LANG==='ar'?'حالة الإرسال':'Delivery Status',LANG==='ar'?'وقت الإرسال':'Sent At'],rows:items.map(item=>{const record=notificationAttendanceRecord(item);return[db.students?.[item.studentId]?.name||'—',className(db.classes?.[item.classId]),dashboardDisplayDate(item.date),dashboardStatusLabel(record),attendanceStatusCountsAsAttended(record.status)?attendanceCountLabel():'—',record.note||'—',item.method||'—',item.status==='sent'?(LANG==='ar'?'تم الإرسال':'Sent'):item.status==='failed'?(LANG==='ar'?'فشل':'Failed'):(LANG==='ar'?'بانتظار الإرسال':'Pending'),dashboardDateTime(item.sentAt)];})});
 }
 window.openNotificationCard=openNotificationCard;
 function renderNotifTable(){
@@ -3814,6 +3819,7 @@ function renderNotifTable(){
   const activeFilterCount=Object.values(filters).filter(Boolean).length;
 
   const total=notifs.length;
+  const attended=notifs.filter(n=>attendanceStatusCountsAsAttended(notificationAttendanceRecord(n).status)).length;
   const pending=notifs.filter(n=>n.status==='pending').length;
   const sent=notifs.filter(n=>n.status==='sent').length;
   const summary=document.getElementById('nfFilterSummary');
@@ -3822,6 +3828,7 @@ function renderNotifTable(){
   const statsEl=document.getElementById('notifStats');
   if(statsEl) statsEl.innerHTML=`
     ${dashboardCard('total','r','🔔',total,LANG==='ar'?'إجمالي الإشعارات':'Total Notifications','openNotificationCard')}
+    ${dashboardCard('attended','g','☑️',attended,attendanceCountLabel(),'openNotificationCard')}
     ${dashboardCard('pending','o','⏳',pending,LANG==='ar'?'بانتظار الإرسال':'Pending','openNotificationCard')}
     ${dashboardCard('sent','g','✅',sent,LANG==='ar'?'تم الإرسال':'Sent','openNotificationCard')}`;
 
@@ -3868,7 +3875,7 @@ function renderNotifTable(){
     return`<tr class="notification-record-row" style="${!hasWhatsApp?'background:var(--warning-bg)':''}">
       <td class="notification-index" style="color:var(--slate-400);font-size:.77rem">${i+1}</td>
       <td class="notification-student-cell" data-label="${rowLabels.student}"><div class="notification-student-name">${studentName}</div><div class="notification-student-meta"><span class="badge bg-b">${classLabel}</span><span class="notification-record-date">${escapeImportHtml(n.date)}</span></div></td>
-      <td data-label="${rowLabels.attendance}"><span class="badge ${attendanceClass}">${attendanceLabel}</span></td>
+      <td data-label="${rowLabels.attendance}"><span class="badge ${attendanceClass}">${attendanceLabel}</span>${attendanceStatusCountsAsAttended(attendanceRecord.status)?`<span class="badge bg-g" style="margin-inline-start:4px">${attendanceCountLabel()}</span>`:''}</td>
       <td class="notification-note-cell" data-label="${rowLabels.note}"><input class="notification-note-input" value="${escapeImportHtml(attendanceRecord.note||'')}" placeholder="${LANG==='ar'?'أضف ملاحظة...':'Add a note...'}" oninput="setNotificationNote('${n.id}',this.value)"></td>
       <td class="notification-contact-cell" data-label="${rowLabels.contact}">${contactHtml}</td>
       <td data-label="${rowLabels.sendVia}"><div class="notification-delivery">
@@ -3931,13 +3938,15 @@ function notificationMessage(notification){
   if(international){
     const event=attendanceStatus==='tardy'?'was recorded tardy':attendanceStatus==='early'?'was recorded as leaving early':'was recorded absent';
     const absenceLine=attendanceStatus==='absent'?`\nAbsence status: ${absenceType==='unexcused'?'Unexcused':'Excused'}.`:'';
+    const attendanceLine=attendanceStatusCountsAsAttended(attendanceStatus)?'\nAttendance count: Counted as attended.':'';
     const noteLine=note?`\nNote: ${note}`:'';
-    return `Dear Parent/Guardian of ${studentName},\n\nThis is to inform you that ${studentName} ${event} on ${date} in ${className(cls,'en')}.${absenceLine}${noteLine}\nAcademic year: ${db.activeAcademicYear} · Semester ${db.activeSemester}.\n\nNajd National Schools`;
+    return `Dear Parent/Guardian of ${studentName},\n\nThis is to inform you that ${studentName} ${event} on ${date} in ${className(cls,'en')}.${absenceLine}${attendanceLine}${noteLine}\nAcademic year: ${db.activeAcademicYear} · Semester ${db.activeSemester}.\n\nNajd National Schools`;
   }
   const event=attendanceStatus==='tardy'?'تأخر الطالب/ة':attendanceStatus==='early'?'انصراف الطالب/ة مبكرًا':'غياب الطالب/ة';
   const absenceLine=attendanceStatus==='absent'?`\nحالة الغياب: ${absenceType==='unexcused'?'بدون عذر':'بعذر'}.`:'';
+  const attendanceLine=attendanceStatusCountsAsAttended(attendanceStatus)?'\nاحتساب الحضور: يُحتسب الطالب/ة حاضرًا.':'';
   const noteLine=note?`\nملاحظة: ${note}`:'';
-  return `السلام عليكم،\nولي أمر الطالب/ة ${studentName} المحترم،\n\nنحيطكم علمًا بأنه تم تسجيل ${event} بتاريخ ${date} في فصل ${className(cls,'ar')}.${absenceLine}${noteLine}\nالسنة الدراسية: ${db.activeAcademicYear} · الفصل الدراسي ${db.activeSemester}.\n\nمدارس نجد الأهلية`;
+  return `السلام عليكم،\nولي أمر الطالب/ة ${studentName} المحترم،\n\nنحيطكم علمًا بأنه تم تسجيل ${event} بتاريخ ${date} في فصل ${className(cls,'ar')}.${absenceLine}${attendanceLine}${noteLine}\nالسنة الدراسية: ${db.activeAcademicYear} · الفصل الدراسي ${db.activeSemester}.\n\nمدارس نجد الأهلية`;
 }
 
 function openWhatsAppNotification(notification,phone){
