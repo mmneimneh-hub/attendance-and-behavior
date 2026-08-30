@@ -13,18 +13,30 @@ CREATE POLICY notifications_write ON public.notifications
   USING (app_private.current_app_role() IN ('admin','principal','teacher','supervisor'))
   WITH CHECK (app_private.current_app_role() IN ('admin','principal','teacher','supervisor'));
 
--- Existing supervisor accounts may carry explicit false values from the old role defaults.
+-- Existing accounts may carry explicit false notification access from older settings.
 -- Upgrade them once; administrators can still change individual section access afterward.
 UPDATE public.staff_profiles
 SET section_permissions = jsonb_set(
-  jsonb_set(COALESCE(section_permissions, '{}'::jsonb), '{students_edit}', 'true'::jsonb, true),
+  COALESCE(section_permissions, '{}'::jsonb),
   '{notifications}', 'true'::jsonb, true
+);
+
+UPDATE public.staff_invites
+SET section_permissions = jsonb_set(
+  COALESCE(section_permissions, '{}'::jsonb),
+  '{notifications}', 'true'::jsonb, true
+);
+
+UPDATE public.staff_profiles
+SET section_permissions = jsonb_set(
+  COALESCE(section_permissions, '{}'::jsonb),
+  '{students_edit}', 'true'::jsonb, true
 )
 WHERE role = 'supervisor';
 
 UPDATE public.staff_invites
 SET section_permissions = jsonb_set(
-  jsonb_set(COALESCE(section_permissions, '{}'::jsonb), '{students_edit}', 'true'::jsonb, true),
-  '{notifications}', 'true'::jsonb, true
+  COALESCE(section_permissions, '{}'::jsonb),
+  '{students_edit}', 'true'::jsonb, true
 )
 WHERE role = 'supervisor';

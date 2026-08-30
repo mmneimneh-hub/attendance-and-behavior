@@ -691,7 +691,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div class="sg" id="dashStats"></div>
       <div class="dashboard-grid" style="display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-bottom:18px">
         <div class="card">
-          <div class="ch"><h3>📈 <span data-ar="نسبة الحضور — آخر 7 أيام" data-en="Attendance Rate — Last 7 Days">نسبة الحضور — آخر 7 أيام</span></h3></div>
+          <div class="ch"><h3>📈 <span data-ar="نسبة الحضور — آخر 7 أيام دراسية" data-en="Attendance Rate — Last 7 School Days">نسبة الحضور — آخر 7 أيام دراسية</span></h3></div>
           <div class="cb"><div class="chart" id="dashChart"></div></div>
         </div>
         <div class="card">
@@ -1312,7 +1312,7 @@ const GRADE_LEVELS = ['4','5','6','7','8','9','10','11','12'];
 const PROGRAM_GRADE_PERMISSION_KEY = '__programGrades';
 const USER_PERMISSION_SCHEMA_KEY = '__permissionSchemaVersion';
 const ACADEMIC_CONTEXT_STORAGE_PREFIX = 'najd_academic_context';
-const PERMISSION_SCHEMA_VERSION = 1;
+const PERMISSION_SCHEMA_VERSION = 2;
 const USER_SECTIONS = ['dashboard','attendance','students_edit','classes','teachers','reports','notifications','behavior_dashboard','behavior_record','behavior_manage','behavior_reports','behavior_reference','permissions','settings'];
 let db = {classes:{},students:{},teachers:{},attendance:{},notifications:[],academicYears:{},activeAcademicYear:DEFAULT_ACADEMIC_YEAR,activeSemester:'1',activeProgram:'national',permissions:JSON.parse(JSON.stringify(DEFAULT_PERMS)),settings:{schoolName:DEFAULT_SCHOOL_NAMES.ar,schoolNameAr:DEFAULT_SCHOOL_NAMES.ar,schoolNameEn:DEFAULT_SCHOOL_NAMES.en,schoolLogo:DEFAULT_SCHOOL_LOGO}};
 let user = null;
@@ -1419,16 +1419,19 @@ function applyPermissionSchemaMigrations(){
   if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
   if(!db.permissions.supervisor)db.permissions.supervisor={};
   db.permissions.supervisor.students_edit=1;
-  db.permissions.supervisor.notifications=1;
+  Object.keys(DEFAULT_PERMS).forEach(role=>{
+    if(!db.permissions[role])db.permissions[role]={};
+    db.permissions[role].notifications=1;
+  });
   db.permissionSchemaVersion=PERMISSION_SCHEMA_VERSION;
   return true;
 }
 function normalizeAccountPermissionSchema(account){
   if(!account)return account;
   const sectionPermissions={...(account.sectionPermissions||{})};
-  if(account.role==='supervisor'&&Number(sectionPermissions[USER_PERMISSION_SCHEMA_KEY]||0)<PERMISSION_SCHEMA_VERSION){
-    sectionPermissions.students_edit=true;
+  if(Number(sectionPermissions[USER_PERMISSION_SCHEMA_KEY]||0)<PERMISSION_SCHEMA_VERSION){
     sectionPermissions.notifications=true;
+    if(account.role==='supervisor')sectionPermissions.students_edit=true;
     sectionPermissions[USER_PERMISSION_SCHEMA_KEY]=PERMISSION_SCHEMA_VERSION;
   }
   account.sectionPermissions=sectionPermissions;
@@ -3217,15 +3220,18 @@ function renderDashboard(){
   ].join('');
   // Chart
   const ch=document.getElementById('dashChart'); ch.innerHTML='';
-  for(let i=6;i>=0;i--){
-    const d=new Date(); d.setDate(d.getDate()-i);
+  const schoolDays=[];
+  for(let d=new Date();schoolDays.length<7;d.setDate(d.getDate()-1)){
+    if(d.getDay()!==5&&d.getDay()!==6)schoolDays.push(new Date(d));
+  }
+  schoolDays.reverse().forEach(d=>{
     const ds=d.toISOString().split('T')[0]; let p=0,tot=0;
     dashboardAttendanceRecords(ds).forEach(item=>{tot++;if(attendanceStatusCountsAsAttended(item.record.status))p++;});
     const pct=tot>0?Math.round(p/tot*100):0;
     const days=LANG==='ar'?['أح','اث','ثل','أر','خم','جم','سب']:['Su','Mo','Tu','We','Th','Fr','Sa'];
     const chartLabel=`${dashboardDisplayDate(ds)}: ${pct}% (${tot} ${LANG==='ar'?'سجلات':'records'})`;
     ch.innerHTML+=`<div class="cb-w dashboard-chart-action" role="button" tabindex="0" title="${escapeImportHtml(chartLabel)}" aria-label="${escapeImportHtml(chartLabel)}" onclick="openAttendanceDashboardDate('${ds}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceDashboardDate('${ds}')}"><div class="cb-value">${tot?`${pct}%`:'—'}</div><div class="cb-track"><div class="cb-bar" style="height:${tot?pct:0}%;background:${pct>=90?'var(--success)':pct>=70?'var(--warning)':'var(--danger)'}"></div></div><div class="cb-lbl">${days[d.getDay()]}<small>${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}</small></div></div>`;
-  }
+  });
   // Top classes
   const topCls=cls.map(c=>({...c,pct:dashboardClassAttendanceRate(c,stus)})).sort((a,b)=>(b.pct??-1)-(a.pct??-1)).slice(0,6);
   document.getElementById('dashTopCls').innerHTML=topCls.map(c=>{const pct=c.pct??0,label=c.pct===null?'—':`${c.pct}%`;return`<div class="dashboard-chart-action" role="button" tabindex="0" aria-label="${escapeImportHtml(className(c))}: ${label}" onclick="openAttendanceDashboardClass('${escapeImportHtml(c.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceDashboardClass('${escapeImportHtml(c.id)}')}" style="margin-bottom:10px;padding:4px"><div style="display:flex;justify-content:space-between;font-size:.81rem;font-weight:600;margin-bottom:3px"><span>${escapeImportHtml(className(c))}</span><span style="color:${c.pct===null?'var(--slate-400)':c.pct>=90?'var(--success)':c.pct>=70?'var(--warning)':'var(--danger)'}">${label}</span></div><div class="pb"><div class="pf ${c.pct===null?'':c.pct>=90?'hi':c.pct>=70?'mi':'lo'}" style="width:${pct}%"></div></div></div>`;}).join('');
