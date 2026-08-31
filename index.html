@@ -1898,6 +1898,11 @@ function durableActivityStateIsMerged(state){
 }
 async function ensureDurableActivityState(){
   if(!window.neonClient||!user)return;
+  // load() has just read the latest shared state. Avoid another read/write
+  // transaction on every sign-in when the durability migration is already
+  // complete; school_state can be large enough for that duplicate request to
+  // noticeably delay the first render.
+  if(durableActivityStateIsMerged(db))return;
   await commitSharedStateMutation(state=>{
     const before=copyStateValue(state);
     mergeDurableActivityState(state);
@@ -2129,7 +2134,14 @@ async function ensureSavedBeforeNavigation(){
 window.ensureSavedBeforeNavigation=ensureSavedBeforeNavigation;
 window.addEventListener('beforeunload',event=>{if(hasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
 async function load(){
-  const stateResult=await window.neonClient.from('school_state').select('data,updated_at,updated_by').eq('singleton',true).limit(1);
+  // These requests are independent. Starting them together removes two
+  // avoidable network round trips from the authenticated app startup path.
+  const stateRequest=window.neonClient.from('school_state').select('data,updated_at,updated_by').eq('singleton',true).limit(1);
+  const staffRequest=window.neonClient.from('staff_profiles').select('user_id,email,full_name,role,programs,grade_levels,section_permissions,active');
+  const inviteRequest=user?.role==='admin'
+    ?window.neonClient.from('staff_invites').select('email,full_name,role,programs,grade_levels,section_permissions,active')
+    :null;
+  const stateResult=await stateRequest;
   if(stateResult.error)throw stateResult.error;
   const row=Array.isArray(stateResult.data)?stateResult.data[0]:stateResult.data;
   if(!row||!row.data)throw new Error('Attendance state is not initialized');
@@ -2142,7 +2154,7 @@ async function load(){
   normalizeSchoolSettings();
   const savedTeachersByEmail=Object.fromEntries(Object.values(db.teachers||{}).filter(tc=>tc.email).map(tc=>[tc.email.toLowerCase(),tc]));
   db.teachers={};
-  const staffResult=await window.neonClient.from('staff_profiles').select('user_id,email,full_name,role,programs,grade_levels,section_permissions,active');
+  const staffResult=await staffRequest;
   if(!staffResult.error){
     (staffResult.data||[]).forEach(profile=>{
       const saved=savedTeachersByEmail[profile.email.toLowerCase()];
@@ -2151,7 +2163,7 @@ async function load(){
     });
   }
   if(user?.role==='admin'){
-    const inviteResult=await window.neonClient.from('staff_invites').select('email,full_name,role,programs,grade_levels,section_permissions,active');
+    const inviteResult=await inviteRequest;
     if(!inviteResult.error){
       (inviteResult.data||[]).forEach(invite=>{
         if(Object.values(db.teachers).some(existing=>existing.email.toLowerCase()===invite.email.toLowerCase()))return;
