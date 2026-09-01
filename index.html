@@ -1615,6 +1615,8 @@ let liveSyncInterval=null;
 let liveSyncEventsBound=false;
 let lastLiveSyncActivityAt=Date.now();
 let liveSyncPaused=false;
+let liveSyncFailureCount=0;
+let nextLiveSyncAttemptAt=0;
 let lastSharedStatePollAt=0;
 let lastServerUpdatedAt='';
 let lastConfirmedState=null;
@@ -1630,9 +1632,10 @@ let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
 let attendanceSaveRetryDelay=900;
 const attendanceTablePeriods=new Map();
-const ATTENDANCE_LIVE_SYNC_MS=8000;
-const SHARED_STATE_LIVE_SYNC_MS=24000;
-const LIVE_SYNC_ACTIVITY_WINDOW_MS=120000;
+const ATTENDANCE_LIVE_SYNC_MS=30000;
+const SHARED_STATE_LIVE_SYNC_MS=120000;
+const LIVE_SYNC_ACTIVITY_WINDOW_MS=300000;
+const LIVE_SYNC_MAX_RETRY_MS=300000;
 const ATTENDANCE_STATUS_SAVE_DELAY_MS=180;
 const ATTENDANCE_NOTE_SAVE_DELAY_MS=750;
 
@@ -2239,6 +2242,7 @@ async function refreshAuthenticatedUserProfile(){
 
 async function pollSharedState(force=false){
   if(!user||!window.neonClient||document.hidden||liveSyncInFlight||hasUnsavedChanges())return;
+  if(!force&&Date.now()<nextLiveSyncAttemptAt)return;
   if(!force&&Date.now()-lastLiveSyncActivityAt>=LIVE_SYNC_ACTIVITY_WINDOW_MS){
     liveSyncPaused=true;
     refreshSaveIndicator();
@@ -2248,6 +2252,8 @@ async function pollSharedState(force=false){
   liveSyncInFlight=true;
   try{
     const attendanceChanged=await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester));
+    liveSyncFailureCount=0;
+    nextLiveSyncAttemptAt=0;
     if(!force&&Date.now()-lastSharedStatePollAt<SHARED_STATE_LIVE_SYNC_MS){
       if(attendanceChanged)refreshLiveAttendanceViews();
       return;
@@ -2266,7 +2272,14 @@ async function pollSharedState(force=false){
     lastServerUpdatedAt=latest.updated_at||'';
     await applyRemoteAcademicState(latest.data);
     refreshSaveIndicator();
-  }catch(e){}finally{liveSyncInFlight=false;}
+  }catch(error){
+    liveSyncFailureCount+=1;
+    const retryDelay=Math.min(ATTENDANCE_LIVE_SYNC_MS*(2**Math.min(liveSyncFailureCount-1,4)),LIVE_SYNC_MAX_RETRY_MS);
+    nextLiveSyncAttemptAt=Date.now()+retryDelay;
+    console.warn('Live sync paused after a service error',{
+      status:error?.status||error?.statusCode||'',code:error?.code||'',retryInMs:retryDelay
+    });
+  }finally{liveSyncInFlight=false;}
 }
 
 function refreshLiveAttendanceViews(){
@@ -2281,13 +2294,18 @@ function resumeLiveSync(force=false){
   lastLiveSyncActivityAt=Date.now();
   liveSyncPaused=false;
   refreshSaveIndicator();
-  if((force||wasPaused)&&!document.hidden)void pollSharedState(true);
+  if((force||wasPaused)&&!document.hidden){
+    nextLiveSyncAttemptAt=0;
+    void pollSharedState(true);
+  }
 }
 
 function startLiveSync(){
   clearInterval(liveSyncInterval);
   lastLiveSyncActivityAt=Date.now();
   liveSyncPaused=false;
+  liveSyncFailureCount=0;
+  nextLiveSyncAttemptAt=0;
   liveSyncInterval=setInterval(()=>pollSharedState(false),ATTENDANCE_LIVE_SYNC_MS);
   if(!liveSyncEventsBound){
     window.addEventListener('focus',()=>resumeLiveSync(true));
