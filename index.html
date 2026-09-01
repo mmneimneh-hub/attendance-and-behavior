@@ -1544,11 +1544,11 @@ function applyWhatsAppNotificationDefault(){
   let changed=false;
   Object.values(db.academicYears||{}).forEach(year=>Object.values(year.semesters||{}).forEach(semester=>{
     (semester.notifications||[]).forEach(notification=>{
-      if(notification.status==='pending'&&(!notification.method||notification.method==='SMS')){notification.method='WhatsApp';changed=true;}
+      if(notification.status==='pending'&&!notification.method){notification.method='WhatsApp';changed=true;}
     });
   }));
   (db.notifications||[]).forEach(notification=>{
-    if(notification.status==='pending'&&(!notification.method||notification.method==='SMS')){notification.method='WhatsApp';changed=true;}
+    if(notification.status==='pending'&&!notification.method){notification.method='WhatsApp';changed=true;}
   });
   return changed;
 }
@@ -1632,8 +1632,8 @@ let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
 let attendanceSaveRetryDelay=900;
 const attendanceTablePeriods=new Map();
-const ATTENDANCE_LIVE_SYNC_MS=30000;
-const SHARED_STATE_LIVE_SYNC_MS=120000;
+const ATTENDANCE_LIVE_SYNC_MS=60000;
+const SHARED_STATE_LIVE_SYNC_MS=300000;
 const LIVE_SYNC_ACTIVITY_WINDOW_MS=300000;
 const LIVE_SYNC_MAX_RETRY_MS=300000;
 const ATTENDANCE_STATUS_SAVE_DELAY_MS=180;
@@ -1692,7 +1692,7 @@ const ATTENDANCE_TABLE_PAGE_SIZE=1000;
 function attendancePeriodKey(academicYear,semester){return `${academicYear}|${String(semester)}`;}
 function attendancePeriodCache(academicYear,semester){
   const key=attendancePeriodKey(academicYear,semester);
-  if(!attendanceTablePeriods.has(key))attendanceTablePeriods.set(key,{loaded:false,attendance:{},lastUpdatedAt:'',promise:null});
+  if(!attendanceTablePeriods.has(key))attendanceTablePeriods.set(key,{loaded:false,attendance:{},notifications:{},lastUpdatedAt:'',promise:null});
   return attendanceTablePeriods.get(key);
 }
 function attendanceRecordFromTableRow(row){
@@ -1704,19 +1704,36 @@ function attendanceRecordFromTableRow(row){
   if(record.status==='absent')record.absenceType=row?.absence_type==='unexcused'?'unexcused':'excused';
   return record;
 }
-function applyAttendanceTableRow(attendance,row){
+function attendanceNotificationKey(classId,date,studentId){return `${classId}|${date}|${studentId}`;}
+function attendanceNotificationFromTableRow(row){
+  const status=['pending','sent','failed','dismissed'].includes(row?.notification_status)?row.notification_status:'';
+  if(!status||status==='dismissed')return null;
+  const record=attendanceRecordFromTableRow(row);
+  return{
+    id:row.notification_id||`attendance-${row.academic_year}-${row.semester}-${row.class_id}-${row.attendance_date}-${row.student_id}`,
+    studentId:row.student_id,classId:row.class_id,date:row.attendance_date,
+    method:['WhatsApp','SMS','Email'].includes(row.notification_method)?row.notification_method:'WhatsApp',
+    status,sentAt:row.notification_sent_at||null,...attendanceNotificationSnapshot(record)
+  };
+}
+function applyAttendanceTableRow(cache,row){
+  const attendance=cache.attendance;
   if(!attendance[row.class_id])attendance[row.class_id]={};
   if(!attendance[row.class_id][row.attendance_date])attendance[row.class_id][row.attendance_date]={};
   const current=attendance[row.class_id][row.attendance_date][row.student_id];
   if(!current||activityTimestamp({updatedAt:row.updated_at})>=activityTimestamp(current)){
     attendance[row.class_id][row.attendance_date][row.student_id]=attendanceRecordFromTableRow(row);
+    const key=attendanceNotificationKey(row.class_id,row.attendance_date,row.student_id);
+    const notification=attendanceNotificationFromTableRow(row);
+    if(notification)cache.notifications[key]=notification;
+    else delete cache.notifications[key];
   }
 }
 async function readAttendanceTableRows(academicYear,semester,since=''){
   const rows=[];
   for(let from=0;;from+=ATTENDANCE_TABLE_PAGE_SIZE){
     let query=window.neonClient.from('attendance_entries')
-      .select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at')
+      .select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at,notification_id,notification_method,notification_status,notification_sent_at')
       .eq('academic_year',academicYear).eq('semester',Number(semester))
       .order('updated_at',{ascending:true}).order('class_id',{ascending:true})
       .order('attendance_date',{ascending:true}).order('student_id',{ascending:true});
@@ -1734,7 +1751,11 @@ function applyAttendanceTableCacheToState(state,academicYear,semester){
   if(!cache?.loaded)return false;
   const sem=sharedSemester(state,academicYear,String(semester));
   sem.attendance=copyData(cache.attendance);
-  if(state.activeAcademicYear===academicYear&&String(state.activeSemester)===String(semester))state.attendance=copyData(cache.attendance);
+  sem.notifications=copyData(Object.values(cache.notifications));
+  if(state.activeAcademicYear===academicYear&&String(state.activeSemester)===String(semester)){
+    state.attendance=copyData(cache.attendance);
+    state.notifications=copyData(sem.notifications);
+  }
   return true;
 }
 function overlayPendingAttendanceForPeriod(state,academicYear,semester){
@@ -1749,10 +1770,13 @@ async function syncAttendanceTablePeriod(academicYear,semester,{force=false}={})
   cache.promise=(async()=>{
     const full=force||!cache.loaded;
     const rows=await readAttendanceTableRows(academicYear,semester,full?'':cache.lastUpdatedAt);
-    const next=full?{}:copyData(cache.attendance);
-    rows.forEach(row=>applyAttendanceTableRow(next,row));
-    const changed=!cache.loaded||!sameStateValue(cache.attendance,next);
-    cache.attendance=next;
+    const nextAttendance=full?{}:copyData(cache.attendance);
+    const nextNotifications=full?{}:copyData(cache.notifications);
+    const nextCache={attendance:nextAttendance,notifications:nextNotifications};
+    rows.forEach(row=>applyAttendanceTableRow(nextCache,row));
+    const changed=!cache.loaded||!sameStateValue(cache.attendance,nextAttendance)||!sameStateValue(cache.notifications,nextNotifications);
+    cache.attendance=nextAttendance;
+    cache.notifications=nextNotifications;
     cache.loaded=true;
     if(rows.length)cache.lastUpdatedAt=rows.reduce((latest,row)=>String(row.updated_at||'')>latest?String(row.updated_at):latest,cache.lastUpdatedAt||'');
     else if(full)cache.lastUpdatedAt='';
@@ -1767,26 +1791,34 @@ async function syncAttendanceTablePeriod(academicYear,semester,{force=false}={})
 }
 window.ensureAttendancePeriodLoaded=(academicYear,semester)=>syncAttendanceTablePeriod(academicYear,String(semester));
 function attendanceTableRowsForBatch(batch){
-  return[...batch.values()].map(patch=>({
-    academic_year:patch.academicYear,semester:Number(patch.semester),class_id:patch.classId,
-    student_id:patch.studentId,attendance_date:patch.date,status:patch.record.status,
-    absence_type:patch.record.status==='absent'?normalizedAbsenceType(patch.record):null,
-    note:patch.record.note||'',updated_by:patch.record.updatedBy||user?.id||null,
-    updated_by_email:patch.record.updatedByEmail||user?.email||null,
-    updated_by_name:patch.record.updatedByName||user?.name||null,
-    updated_at:patch.record.updatedAt||new Date().toISOString()
-  }));
+  return[...batch.values()].map(patch=>{
+    const notice=patch.notification;
+    const notificationStatus=notice?.status||(patch.notificationRemoved?'dismissed':null);
+    return{
+      academic_year:patch.academicYear,semester:Number(patch.semester),class_id:patch.classId,
+      student_id:patch.studentId,attendance_date:patch.date,status:patch.record.status,
+      absence_type:patch.record.status==='absent'?normalizedAbsenceType(patch.record):null,
+      note:patch.record.note||'',updated_by:patch.record.updatedBy||user?.id||null,
+      updated_by_email:patch.record.updatedByEmail||user?.email||null,
+      updated_by_name:patch.record.updatedByName||user?.name||null,
+      updated_at:patch.record.updatedAt||new Date().toISOString(),
+      notification_id:notice?.id||null,
+      notification_method:notice?.method||null,
+      notification_status:notificationStatus,
+      notification_sent_at:notice?.sentAt||null
+    };
+  });
 }
 async function persistAttendanceTableBatch(batch){
   const rows=attendanceTableRowsForBatch(batch);
   const result=await window.neonClient.from('attendance_entries').upsert(rows,{
     onConflict:'academic_year,semester,class_id,student_id,attendance_date'
-  }).select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at');
+  }).select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at,notification_id,notification_method,notification_status,notification_sent_at');
   if(result.error)throw result.error;
   (result.data||rows).forEach(row=>{
     const cache=attendancePeriodCache(row.academic_year,String(row.semester));
     if(cache.loaded){
-      applyAttendanceTableRow(cache.attendance,row);
+      applyAttendanceTableRow(cache,row);
       if(String(row.updated_at||'')>cache.lastUpdatedAt)cache.lastUpdatedAt=String(row.updated_at);
     }
   });
@@ -1912,6 +1944,7 @@ function ignoredGenericStatePath(path){
   const joined=path.join('.');
   return ['activeAcademicYear','activeSemester','activeProgram','classes','students','attendance','notifications','durableActivity'].includes(path[0])
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.attendance(\.|$)/.test(joined)
+    || /^academicYears\.[^.]+\.semesters\.[^.]+\.notifications(\.|$)/.test(joined)
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.behavior\.(violations|positives|audit|nextViolationId|nextPositiveId)(\.|$)/.test(joined);
 }
 function mergeableIdCollection(left,right){
@@ -2842,15 +2875,20 @@ let attendanceFlushInFlight=false;
 let attendanceFlushPromise=Promise.resolve();
 let attendanceSaveError=null;
 
-function queueAttendancePatch(classId,date,studentId,record,{requiresSharedState=true,delay=ATTENDANCE_STATUS_SAVE_DELAY_MS}={}){
+function queueAttendancePatch(classId,date,studentId,record,options={}){
   if(!user||!classId||!date||!studentId)return;
-  const notice=(db.notifications||[]).find(item=>item.studentId===studentId&&item.classId===classId&&item.date===date&&item.status==='pending');
+  const delay=options.delay??ATTENDANCE_STATUS_SAVE_DELAY_MS;
+  const notificationWasProvided=Object.prototype.hasOwnProperty.call(options,'notification');
+  let notice=notificationWasProvided?options.notification:(db.notifications||[]).find(item=>item.studentId===studentId&&item.classId===classId&&item.date===date);
+  if(!notice&&!notificationWasProvided&&attendanceStatusNeedsNotification(record.status)){
+    notice={id:'n'+rnd(),studentId,classId,date,method:'WhatsApp',status:'pending',sentAt:null,...attendanceNotificationSnapshot(record)};
+    db.notifications.push(notice);
+  }
   const key=[db.activeAcademicYear,String(db.activeSemester),classId,date,studentId].join('|');
-  const queued=attendancePatches.get(key);
   const patch={
     academicYear:db.activeAcademicYear,semester:String(db.activeSemester),classId,date,studentId,
     record:copyData(record),notification:notice?copyData(notice):null,
-    requiresSharedState:requiresSharedState||!!queued?.requiresSharedState
+    notificationRemoved:notificationWasProvided&&!notice
   };
   attendancePatches.set(key,patch);
   attendanceSaveError=null;
@@ -2882,15 +2920,17 @@ function applyAttendancePatch(state,patch){
   if(!isPlainStateObject(durable[patch.classId][patch.date]))durable[patch.classId][patch.date]={};
   durable[patch.classId][patch.date][patch.studentId]=copyData(patch.record);
   const sameNotice=item=>item.studentId===patch.studentId&&item.classId===patch.classId&&item.date===patch.date;
-  if(attendanceStatusNeedsNotification(patch.record.status)){
-    const existing=sem.notifications.find(item=>sameNotice(item)&&item.status==='pending');
+  if(patch.notificationRemoved){
+    sem.notifications=sem.notifications.filter(item=>!sameNotice(item));
+  }else if(patch.notification||attendanceStatusNeedsNotification(patch.record.status)){
+    const existingIndex=sem.notifications.findIndex(sameNotice);
     const notice=copyData(patch.notification||{
       id:'n'+rnd(),studentId:patch.studentId,classId:patch.classId,date:patch.date,method:'WhatsApp',status:'pending',sentAt:null,
       ...attendanceNotificationSnapshot(patch.record)
     });
     Object.assign(notice,attendanceNotificationSnapshot(patch.record));
-    if(existing)Object.assign(existing,notice,{id:existing.id,status:'pending',sentAt:null});
-    else if(!sem.notifications.some(sameNotice))sem.notifications.push(notice);
+    if(existingIndex>=0)sem.notifications[existingIndex]=notice;
+    else sem.notifications.push(notice);
   }else{
     sem.notifications=sem.notifications.filter(item=>!(sameNotice(item)&&item.status==='pending'));
   }
@@ -2898,18 +2938,6 @@ function applyAttendancePatch(state,patch){
     state.attendance=copyData(sem.attendance);
     state.notifications=copyData(sem.notifications);
   }
-}
-
-function attendanceBatchSaved(state,batch){
-  return [...batch.values()].every(patch=>{
-    const semester=state?.academicYears?.[patch.academicYear]?.semesters?.[patch.semester];
-    const record=semester?.attendance?.[patch.classId]?.[patch.date]?.[patch.studentId];
-    if(!sameStateValue(record,patch.record))return false;
-    const durableRecord=state?.durableActivity?.attendance?.[patch.academicYear]?.[patch.semester]?.[patch.classId]?.[patch.date]?.[patch.studentId];
-    if(!sameStateValue(durableRecord,patch.record))return false;
-    const matching=(semester?.notifications||[]).filter(item=>item.studentId===patch.studentId&&item.classId===patch.classId&&item.date===patch.date);
-    return attendanceStatusNeedsNotification(patch.record.status)?matching.length>0:!matching.some(item=>item.status==='pending');
-  });
 }
 
 async function flushAttendancePatches({throwOnError=false}={}){
@@ -2929,12 +2957,7 @@ async function flushAttendancePatches({throwOnError=false}={}){
     await persistAttendanceTableBatch(batch);
     applyAttendanceTableCacheToState(db,db.activeAcademicYear,String(db.activeSemester));
     overlayPendingAttendanceForPeriod(db,db.activeAcademicYear,String(db.activeSemester));
-    const sharedBatch=new Map([...batch].filter(([,patch])=>patch.requiresSharedState));
-    if(!sharedBatch.size)return true;
-    return commitSharedStateMutation(state=>{
-      sharedBatch.forEach(patch=>applyAttendancePatch(state,patch));
-      return state;
-    },confirmed=>attendanceBatchSaved(confirmed,sharedBatch));
+    return true;
   })();
   try{
     await attendanceFlushPromise;
@@ -3142,7 +3165,7 @@ function setNote(sid,note){
   materializeAttendanceDay(cls,date);
   if(!db.attendance[cls][date][sid])db.attendance[cls][date][sid]={status:'present',note,...attendanceAttribution()};
   else db.attendance[cls][date][sid]={...db.attendance[cls][date][sid],note,...attendanceAttribution()};
-  queueAttendancePatch(cls,date,sid,db.attendance[cls][date][sid],{requiresSharedState:false,delay:ATTENDANCE_NOTE_SAVE_DELAY_MS});
+  queueAttendancePatch(cls,date,sid,db.attendance[cls][date][sid],{delay:ATTENDANCE_NOTE_SAVE_DELAY_MS});
 }
 
 function updAttCounters(cls,date){
@@ -3842,7 +3865,6 @@ window.openNotificationCard=openNotificationCard;
 function renderNotifTable(){
   refreshNotificationScopeFilters(false);
   const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
-  let addedMissingNotification=false;
   // Sync: create notifications for absence, tardiness, and early leave records.
   Object.entries(db.attendance).forEach(([cls,byDate])=>{
     if(!visibleClassIds.has(cls))return;
@@ -3851,17 +3873,16 @@ function renderNotifTable(){
         const sameNotification=n=>n.studentId===sid&&n.classId===cls&&n.date===date;
         const existing=db.notifications.find(n=>sameNotification(n)&&n.status==='pending');
         if(attendanceStatusNeedsNotification(rec.status)&&!db.notifications.some(sameNotification)){
-          db.notifications.push({id:'n'+rnd(),studentId:sid,classId:cls,date,method:'WhatsApp',status:'pending',sentAt:null,...attendanceNotificationSnapshot(rec)});
-          addedMissingNotification=true;
+          const notification={id:'n'+rnd(),studentId:sid,classId:cls,date,method:'WhatsApp',status:'pending',sentAt:null,...attendanceNotificationSnapshot(rec)};
+          db.notifications.push(notification);
+          persistNotificationState(notification);
         }else if(existing&&attendanceStatusNeedsNotification(rec.status)){
           const snapshot=attendanceNotificationSnapshot(rec);
-          if(existing.attendanceStatus!==snapshot.attendanceStatus||existing.absenceType!==snapshot.absenceType||existing.note!==snapshot.note){Object.assign(existing,snapshot);addedMissingNotification=true;}
+          if(existing.attendanceStatus!==snapshot.attendanceStatus||existing.absenceType!==snapshot.absenceType||existing.note!==snapshot.note){Object.assign(existing,snapshot);persistNotificationState(existing);}
         }
       });
     });
   });
-  if(addedMissingNotification)save();
-
   const filters=notificationFilterValues();
   const notifs=(db.notifications||[]).filter(item=>notificationMatchesFilters(item,filters,visibleClassIds)).slice().reverse();
   const activeFilterCount=Object.values(filters).filter(Boolean).length;
@@ -3944,7 +3965,7 @@ function renderNotifTable(){
   }).join('');
 }
 
-function changeMethod(id,method){const n=db.notifications.find(x=>x.id===id);if(n){n.method=method;save();}}
+function changeMethod(id,method){const n=db.notifications.find(x=>x.id===id);if(n){n.method=method;persistNotificationState(n);}}
 
 function normalizeWhatsAppPhone(value){
   let digits=String(value||'').replace(/\D/g,'');
@@ -3959,6 +3980,14 @@ function notificationAttendanceRecord(notification){
   return db.attendance?.[notification.classId]?.[notification.date]?.[notification.studentId]||{status:notification.attendanceStatus||'absent',absenceType:notification.absenceType||'excused',note:notification.note||''};
 }
 
+function persistNotificationState(notification,{removed=false,delay=ATTENDANCE_STATUS_SAVE_DELAY_MS}={}){
+  const record=notificationAttendanceRecord(notification);
+  ensureAttRec(notification.classId,notification.date);
+  const updated={...record,...attendanceAttribution()};
+  db.attendance[notification.classId][notification.date][notification.studentId]=updated;
+  queueAttendancePatch(notification.classId,notification.date,notification.studentId,updated,{notification:removed?null:notification,delay});
+}
+
 function setNotificationNote(id,note){
   if(!hasPermission('notifications'))return;
   const notification=db.notifications.find(item=>item.id===id);if(!notification||!visibleClasses().some(cls=>cls.id===notification.classId))return;
@@ -3969,7 +3998,7 @@ function setNotificationNote(id,note){
   notification.note=updated.note;
   notification.attendanceStatus=updated.status;
   notification.absenceType=updated.status==='absent'?normalizedAbsenceType(updated):null;
-  queueAttendancePatch(notification.classId,notification.date,notification.studentId,updated,{requiresSharedState:false,delay:ATTENDANCE_NOTE_SAVE_DELAY_MS});
+  queueAttendancePatch(notification.classId,notification.date,notification.studentId,updated,{notification,delay:ATTENDANCE_NOTE_SAVE_DELAY_MS});
 }
 
 function notificationMessage(notification){
@@ -4021,26 +4050,28 @@ function sendNotif(id){
   if(n.method==='WhatsApp'&&!openWhatsAppNotification(n,phone))return;
   if(n.method==='SMS'&&!phone){toast(t('noContact'));return;}
   if(n.method==='Email'&&!email){toast(t('noContact'));return;}
-  n.status='sent'; n.sentAt=new Date().toLocaleTimeString(LANG==='ar'?'ar-SA':'en-US');
-  save(); renderNotifTable();
+  n.status='sent'; n.sentAt=new Date().toISOString();
+  persistNotificationState(n);renderNotifTable();
   const msg=n.method==='SMS'?`${t('smsSent')} ${phone}`:n.method==='WhatsApp'?(LANG==='ar'?'💬 تم فتح الرسالة في واتساب لإرسالها':'💬 Message opened in WhatsApp for sending'):`${t('emailSent')} ${email}`;
   toast(msg);
 }
 
-function deleteNotif(id){const target=db.notifications.find(n=>n.id===id);if(!target||!visibleClasses().some(c=>c.id===target.classId))return;db.notifications=db.notifications.filter(n=>n.id!==id);save();renderNotifTable();}
+function deleteNotif(id){const target=db.notifications.find(n=>n.id===id);if(!target||!visibleClasses().some(c=>c.id===target.classId))return;db.notifications=db.notifications.filter(n=>n.id!==id);persistNotificationState(target,{removed:true});renderNotifTable();}
 
 function sendAllPending(){
   const next=notificationCardItems().find(n=>n.status==='pending');
   if(!next){toast(LANG==='ar'?'لا توجد إشعارات معلّقة':'There are no pending notifications');return;}
-  if(next.method!=='WhatsApp'){next.method='WhatsApp';save();}
+  if(next.method!=='WhatsApp')next.method='WhatsApp';
   sendNotif(next.id);
 }
 
 function clearSentNotifs(){
   if(!confirm(LANG==='ar'?'حذف جميع الإشعارات المُرسَلة؟':'Delete all sent notifications?'))return;
   const visibleClassIds=new Set(visibleClasses().map(c=>c.id));
+  const removed=db.notifications.filter(n=>n.status==='sent'&&visibleClassIds.has(n.classId));
   db.notifications=db.notifications.filter(n=>n.status!=='sent'||!visibleClassIds.has(n.classId));
-  save();renderNotifTable();toast(t('clearSent'));
+  removed.forEach(notification=>persistNotificationState(notification,{removed:true}));
+  renderNotifTable();toast(t('clearSent'));
 }
 
 function resetNotifFilters(){
@@ -4326,15 +4357,7 @@ async function resetAllData(){
       .eq('academic_year',academicYear).eq('semester',Number(semester));
     if(deleted.error)throw deleted.error;
     const cache=attendancePeriodCache(academicYear,semester);
-    cache.loaded=true;cache.attendance={};cache.lastUpdatedAt='';
-    await commitSharedStateMutation(state=>{
-      const sem=sharedSemester(state,academicYear,semester);
-      sem.attendance={};sem.notifications=[];
-      const durable=durableAttendanceSemester(state,academicYear,semester);
-      Object.keys(durable).forEach(key=>delete durable[key]);
-      if(state.activeAcademicYear===academicYear&&String(state.activeSemester)===semester){state.attendance={};state.notifications=[];}
-      return state;
-    },state=>countAttendanceRecords(state?.academicYears?.[academicYear]?.semesters?.[semester]?.attendance)===0);
+    cache.loaded=true;cache.attendance={};cache.notifications={};cache.lastUpdatedAt='';
     db.attendance={};Object.keys(db.classes||{}).forEach(id=>{db.attendance[id]={};});db.notifications=[];
     refreshAcademicViews();
     toast(LANG==='ar'?'🗑️ تم مسح سجلات الفصل الحالي':'🗑️ Current semester attendance cleared');
