@@ -137,6 +137,104 @@ REVOKE ALL ON FUNCTION public.school_state_app_meta(boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.school_state_for_app(boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.school_state_app_meta(boolean) TO authenticated;
 
+-- Apply small client-side state operations inside Postgres. Attendance-side
+-- roster and settings edits therefore send only changed fields and no longer
+-- download and replace the full shared JSON document for every save.
+CREATE OR REPLACE FUNCTION public.apply_school_state_operations(
+  p_operations jsonb,
+  p_updated_by text DEFAULT NULL
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  current_data jsonb;
+  operation jsonb;
+  operation_type text;
+  operation_path text[];
+  item_id text;
+  collection jsonb;
+  next_collection jsonb;
+  replaced boolean;
+BEGIN
+  IF jsonb_typeof(p_operations) <> 'array' THEN
+    RAISE EXCEPTION 'Operations must be a JSON array';
+  END IF;
+  IF jsonb_array_length(p_operations) > 5000 THEN
+    RAISE EXCEPTION 'Too many state operations in one request';
+  END IF;
+
+  SELECT data
+  INTO current_data
+  FROM public.school_state
+  WHERE singleton = true
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'School state is not initialized';
+  END IF;
+
+  FOR operation IN SELECT value FROM jsonb_array_elements(p_operations) LOOP
+    IF jsonb_typeof(operation) <> 'object' OR jsonb_typeof(operation -> 'path') <> 'array' THEN
+      RAISE EXCEPTION 'Invalid state operation';
+    END IF;
+    SELECT COALESCE(array_agg(value ORDER BY ordinal), ARRAY[]::text[])
+    INTO operation_path
+    FROM jsonb_array_elements_text(operation -> 'path') WITH ORDINALITY AS path_item(value, ordinal);
+    IF cardinality(operation_path) > 16 THEN
+      RAISE EXCEPTION 'State operation path is too deep';
+    END IF;
+
+    operation_type := operation ->> 'type';
+    IF operation_type = 'set' THEN
+      IF NOT operation ? 'value' THEN RAISE EXCEPTION 'Set operation has no value'; END IF;
+      IF cardinality(operation_path) = 0 THEN current_data := operation -> 'value';
+      ELSE current_data := jsonb_set(current_data, operation_path, operation -> 'value', true); END IF;
+    ELSIF operation_type = 'delete' THEN
+      IF cardinality(operation_path) = 0 THEN RAISE EXCEPTION 'Cannot delete the root state'; END IF;
+      current_data := current_data #- operation_path;
+    ELSIF operation_type IN ('collection-upsert', 'collection-delete') THEN
+      IF cardinality(operation_path) = 0 THEN RAISE EXCEPTION 'Collection path is required'; END IF;
+      item_id := operation ->> 'id';
+      IF COALESCE(item_id, '') = '' THEN RAISE EXCEPTION 'Collection operation has no id'; END IF;
+      collection := current_data #> operation_path;
+      IF jsonb_typeof(collection) <> 'array' THEN collection := '[]'::jsonb; END IF;
+
+      IF operation_type = 'collection-delete' THEN
+        SELECT COALESCE(jsonb_agg(item ORDER BY ordinal), '[]'::jsonb)
+        INTO next_collection
+        FROM jsonb_array_elements(collection) WITH ORDINALITY AS entry(item, ordinal)
+        WHERE item ->> 'id' IS DISTINCT FROM item_id;
+      ELSE
+        IF NOT operation ? 'value' THEN RAISE EXCEPTION 'Collection upsert has no value'; END IF;
+        SELECT
+          COALESCE(jsonb_agg(CASE WHEN item ->> 'id' = item_id THEN operation -> 'value' ELSE item END ORDER BY ordinal), '[]'::jsonb),
+          COALESCE(bool_or(item ->> 'id' = item_id), false)
+        INTO next_collection, replaced
+        FROM jsonb_array_elements(collection) WITH ORDINALITY AS entry(item, ordinal);
+        IF NOT replaced THEN next_collection := next_collection || jsonb_build_array(operation -> 'value'); END IF;
+      END IF;
+      current_data := jsonb_set(current_data, operation_path, next_collection, true);
+    ELSE
+      RAISE EXCEPTION 'Unsupported state operation type';
+    END IF;
+  END LOOP;
+
+  UPDATE public.school_state
+  SET data = current_data,
+      updated_at = GREATEST(now(), updated_at + interval '1 microsecond'),
+      updated_by = p_updated_by
+  WHERE singleton = true;
+
+  RETURN true;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.apply_school_state_operations(jsonb, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.apply_school_state_operations(jsonb, text) TO authenticated;
+
 -- The landing dashboard needs counts, not every attendance record. Returning
 -- grouped values avoids transferring notes, names, timestamps, and one JSON
 -- object per student per school day on every login.

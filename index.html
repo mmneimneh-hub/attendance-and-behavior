@@ -2256,7 +2256,17 @@ async function persistState(pending){
   if(!window.neonClient||!user)return;
   const operations=collectStateOperations(pending.base||{},pending.snapshot||{});
   if(!operations.length)return;
-  await commitSharedStateMutation(latest=>applyStateOperations(latest,operations),confirmed=>stateOperationsMatch(confirmed,operations));
+  const result=await window.neonClient.rpc('apply_school_state_operations',{
+    p_operations:operations,p_updated_by:user?.id||null
+  });
+  if(result.error)throw result.error;
+  lastConfirmedState=applyStateOperations(lastConfirmedState||pending.base||{},operations);
+  if(pendingStateSave){
+    pendingStateSave={base:copyData(lastConfirmedState),snapshot:pendingStateSave.snapshot};
+  }
+  // The server applied these operations on top of the latest row. Force the
+  // next low-frequency metadata check to reconcile any concurrent remote edit.
+  lastServerUpdatedAt='';schoolStateContentHash='';
 }
 function save(){
   if(!user||!window.neonClient)return;
