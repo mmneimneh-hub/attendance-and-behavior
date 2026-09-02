@@ -402,7 +402,8 @@ html[dir="rtl"] .mini-stat{border-left:none;border-right:1px solid var(--slate-1
 .chart{background-color:var(--slate-50);background-image:linear-gradient(to top,rgba(148,163,184,.18) 1px,transparent 1px);background-size:100% 25%;border-radius:var(--radius);padding:12px 14px 10px;
   height:210px;display:flex;align-items:stretch;gap:8px;border:1px solid var(--slate-100)}
 .cb-w{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0;padding:3px 4px}
-.cb-value{height:18px;font-size:.68rem;color:var(--slate-600);font-weight:800;white-space:nowrap}
+.cb-value{min-height:31px;font-size:.68rem;color:var(--slate-600);font-weight:800;white-space:nowrap;text-align:center;line-height:1.15}
+.cb-value small{display:block;font-size:.55rem;color:var(--slate-400);font-weight:600;margin-top:2px}
 .cb-track{display:flex;align-items:flex-end;justify-content:center;flex:1;width:100%;min-height:0}
 .cb-bar{width:min(54px,78%);border-radius:7px 7px 2px 2px;min-height:0;box-shadow:0 3px 8px rgba(15,23,42,.12);transition:height .6s,filter .2s}
 .dashboard-chart-action:hover .cb-bar{filter:brightness(.94)}
@@ -746,7 +747,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div class="sg" id="dashStats"></div>
       <div class="dashboard-grid" style="display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-bottom:18px">
         <div class="card">
-          <div class="ch"><h3>📈 <span data-ar="نسبة الحضور — آخر 7 أيام دراسية" data-en="Attendance Rate — Last 7 School Days">نسبة الحضور — آخر 7 أيام دراسية</span></h3></div>
+          <div class="ch"><h3>📈 <span data-ar="نسبة الحضور من السجلات المدخلة — آخر 7 أيام دراسية" data-en="Attendance Rate from Recorded Entries — Last 7 School Days">نسبة الحضور من السجلات المدخلة — آخر 7 أيام دراسية</span></h3></div>
           <div class="cb"><div class="chart" id="dashChart"></div></div>
         </div>
         <div class="card">
@@ -3586,7 +3587,9 @@ async function saveAttRecord(){
 // STUDENT STATS
 // ════════════════════════════════════════════
 function attendanceStatsTotal(stats){
-  return Number(stats?.present||0)+Number(stats?.absent||0)+Number(stats?.tardy||0)+Number(stats?.early||0);
+  const categorizedAbsences=Number(stats?.excusedAbsence||0)+Number(stats?.unexcusedAbsence||0);
+  const absences=Math.max(Number(stats?.absent||0),categorizedAbsences);
+  return Number(stats?.present||0)+absences+Number(stats?.tardy||0)+Number(stats?.early||0);
 }
 function attendanceRateValue(stats){
   const total=attendanceStatsTotal(stats);
@@ -3776,7 +3779,7 @@ function renderDashboard(){
     const pct=tot>0?Math.round(p/tot*100):0;
     const days=LANG==='ar'?['أح','اث','ثل','أر','خم','جم','سب']:['Su','Mo','Tu','We','Th','Fr','Sa'];
     const chartLabel=`${dashboardDisplayDate(ds)}: ${pct}% (${tot} ${LANG==='ar'?'سجلات':'records'})`;
-    ch.innerHTML+=`<div class="cb-w dashboard-chart-action" role="button" tabindex="0" title="${escapeImportHtml(chartLabel)}" aria-label="${escapeImportHtml(chartLabel)}" onclick="openAttendanceDashboardDate('${ds}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceDashboardDate('${ds}')}"><div class="cb-value">${tot?`${pct}%`:'—'}</div><div class="cb-track"><div class="cb-bar" style="height:${tot?pct:0}%;background:${pct>=90?'var(--success)':pct>=70?'var(--warning)':'var(--danger)'}"></div></div><div class="cb-lbl">${days[d.getDay()]}<small>${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}</small></div></div>`;
+    ch.innerHTML+=`<div class="cb-w dashboard-chart-action" role="button" tabindex="0" title="${escapeImportHtml(chartLabel)}" aria-label="${escapeImportHtml(chartLabel)}" onclick="openAttendanceDashboardDate('${ds}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAttendanceDashboardDate('${ds}')}"><div class="cb-value">${tot?`${pct}%<small>${tot} ${LANG==='ar'?'سجل':'records'}</small>`:'—'}</div><div class="cb-track"><div class="cb-bar" style="height:${tot?pct:0}%;background:${pct>=90?'var(--success)':pct>=70?'var(--warning)':'var(--danger)'}"></div></div><div class="cb-lbl">${days[d.getDay()]}<small>${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}</small></div></div>`;
   });
   // Top classes
   const topCls=cls.map(c=>({...c,pct:dashboardClassAttendanceRate(c,stus)})).sort((a,b)=>(b.pct??-1)-(a.pct??-1)).slice(0,6);
