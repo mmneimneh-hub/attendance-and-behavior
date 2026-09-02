@@ -1619,6 +1619,8 @@ let liveSyncFailureCount=0;
 let nextLiveSyncAttemptAt=0;
 let lastSharedStatePollAt=0;
 let lastServerUpdatedAt='';
+let schoolStateContentHash='';
+let behaviorStateLoaded=false;
 let lastConfirmedState=null;
 let sharedMutationChain=Promise.resolve();
 let sharedMutationInFlight=0;
@@ -1632,12 +1634,17 @@ let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
 let attendanceSaveRetryDelay=900;
 const attendanceTablePeriods=new Map();
+const attendanceSummaryScopes=new Map();
+const attendanceDetailScopes=new Map();
+let lastAttendanceRevision=0;
 const ATTENDANCE_LIVE_SYNC_MS=60000;
 const SHARED_STATE_LIVE_SYNC_MS=300000;
 const LIVE_SYNC_ACTIVITY_WINDOW_MS=300000;
 const LIVE_SYNC_MAX_RETRY_MS=300000;
 const ATTENDANCE_STATUS_SAVE_DELAY_MS=180;
 const ATTENDANCE_NOTE_SAVE_DELAY_MS=750;
+const ATTENDANCE_DETAIL_COLUMNS='academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at,notification_id,notification_method,notification_status,notification_sent_at';
+const ATTENDANCE_REPORT_COLUMNS='academic_year,semester,class_id,student_id,attendance_date,status,absence_type';
 
 function sharedStateRow(result){
   return Array.isArray(result?.data)?result.data[0]:result?.data;
@@ -1648,6 +1655,15 @@ async function readSharedState(fields='data,updated_at,updated_by'){
   if(result.error)throw result.error;
   const row=sharedStateRow(result);
   if(!row)throw new Error('School state is not initialized');
+  return row;
+}
+async function readAppSharedState(includeBehavior=false,metaOnly=false){
+  const result=await window.neonClient.rpc(metaOnly?'school_state_app_meta':'school_state_for_app',{
+    p_include_behavior:!!includeBehavior
+  });
+  if(result.error)throw result.error;
+  const row=Array.isArray(result.data)?result.data[0]:result.data;
+  if(!row||(!metaOnly&&!row.data))throw new Error('School state is not initialized');
   return row;
 }
 
@@ -1689,11 +1705,84 @@ function sameStateValue(left,right){
   return false;
 }
 const ATTENDANCE_TABLE_PAGE_SIZE=1000;
-function attendancePeriodKey(academicYear,semester){return `${academicYear}|${String(semester)}`;}
+function attendanceClassIdsForPeriod(academicYear=db.activeAcademicYear){
+  const classes=Object.values(db.academicYears?.[academicYear]?.classes||{});
+  return classes.filter(cls=>{
+    normalizeClassScope(cls);
+    return cls.program===db.activeProgram&&allowedPrograms().includes(cls.program)&&allowedGrades(cls.program).includes(classGrade(cls));
+  }).map(cls=>cls.id).sort();
+}
+function attendancePeriodKey(academicYear,semester,classIds=attendanceClassIdsForPeriod(academicYear)){
+  return `${academicYear}|${String(semester)}|${classIds.join(',')}`;
+}
 function attendancePeriodCache(academicYear,semester){
-  const key=attendancePeriodKey(academicYear,semester);
-  if(!attendanceTablePeriods.has(key))attendanceTablePeriods.set(key,{loaded:false,attendance:{},notifications:{},lastUpdatedAt:'',promise:null});
+  const classIds=attendanceClassIdsForPeriod(academicYear);
+  const key=attendancePeriodKey(academicYear,semester,classIds);
+  if(!attendanceTablePeriods.has(key))attendanceTablePeriods.set(key,{loaded:false,attendance:{},notifications:{},lastUpdatedAt:'',promise:null,classIds});
   return attendanceTablePeriods.get(key);
+}
+function recentAttendanceDates(){
+  const dates=[];
+  for(let date=new Date();dates.length<7;date.setDate(date.getDate()-1)){
+    if(date.getDay()!==5&&date.getDay()!==6)dates.push(date.toISOString().split('T')[0]);
+  }
+  return dates.sort();
+}
+function attendanceSummaryKey(academicYear=db.activeAcademicYear,semester=String(db.activeSemester),classIds=attendanceClassIdsForPeriod(academicYear)){
+  return attendancePeriodKey(academicYear,semester,classIds);
+}
+function currentAttendanceSummary(){return attendanceSummaryScopes.get(attendanceSummaryKey())||null;}
+function emptyAttendanceStats(){return{present:0,absent:0,excusedAbsence:0,unexcusedAbsence:0,tardy:0,early:0};}
+function normalizeAttendanceStats(value={}){
+  const stats=emptyAttendanceStats();
+  Object.keys(stats).forEach(key=>{stats[key]=Number(value?.[key]||0);});
+  return stats;
+}
+function attendanceSummaryStudentStats(studentId){
+  const item=currentAttendanceSummary()?.students?.find(entry=>entry.studentId===studentId);
+  return item?normalizeAttendanceStats(item):null;
+}
+function attendanceSummaryClassStats(classId){
+  const item=currentAttendanceSummary()?.classes?.find(entry=>entry.classId===classId);
+  return item?{total:Number(item.total||0),attended:Number(item.attended||0)}:null;
+}
+function attendanceSummaryDayStats(date){
+  const item=currentAttendanceSummary()?.days?.find(entry=>entry.date===date);
+  return item?normalizeAttendanceStats(item):emptyAttendanceStats();
+}
+async function readAttendanceRevision(){
+  const result=await window.neonClient.from('attendance_sync_state').select('revision').eq('singleton',true).limit(1);
+  if(result.error)throw result.error;
+  const row=sharedStateRow(result);
+  return Number(row?.revision||0);
+}
+async function syncAttendanceSummary(academicYear=db.activeAcademicYear,semester=String(db.activeSemester),{force=false,revision=null}={}){
+  const classIds=attendanceClassIdsForPeriod(academicYear);
+  const key=attendanceSummaryKey(academicYear,semester,classIds);
+  const previous=attendanceSummaryScopes.get(key);
+  let currentRevision=revision;
+  if(currentRevision==null&&previous&&!force)currentRevision=await readAttendanceRevision();
+  if(previous&&!force&&Number(previous.revision)===Number(currentRevision)){
+    lastAttendanceRevision=Number(currentRevision||lastAttendanceRevision);
+    return false;
+  }
+  if(!classIds.length){
+    const empty={revision:Number(currentRevision||0),totalRecords:0,classes:[],students:[],days:[]};
+    attendanceSummaryScopes.set(key,empty);lastAttendanceRevision=empty.revision;return !previous;
+  }
+  const result=await window.neonClient.rpc('attendance_period_summary',{
+    p_academic_year:academicYear,p_semester:Number(semester),p_class_ids:classIds,p_recent_dates:recentAttendanceDates()
+  });
+  if(result.error)throw result.error;
+  const payload=Array.isArray(result.data)?result.data[0]:result.data;
+  const next={
+    revision:Number(payload?.revision||currentRevision||0),totalRecords:Number(payload?.totalRecords||0),
+    classes:Array.isArray(payload?.classes)?payload.classes:[],students:Array.isArray(payload?.students)?payload.students:[],
+    days:Array.isArray(payload?.days)?payload.days:[]
+  };
+  attendanceSummaryScopes.set(key,next);
+  lastAttendanceRevision=next.revision;
+  return !previous||Number(previous.revision)!==next.revision||!sameStateValue(previous,next);
 }
 function attendanceRecordFromTableRow(row){
   const record={
@@ -1729,15 +1818,23 @@ function applyAttendanceTableRow(cache,row){
     else delete cache.notifications[key];
   }
 }
-async function readAttendanceTableRows(academicYear,semester,since=''){
+async function readAttendanceTableRows(academicYear,semester,since='',filters={}){
+  const classIds=filters.classIds||attendanceClassIdsForPeriod(academicYear);
+  if(!classIds.length)return[];
   const rows=[];
   for(let from=0;;from+=ATTENDANCE_TABLE_PAGE_SIZE){
     let query=window.neonClient.from('attendance_entries')
-      .select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at,notification_id,notification_method,notification_status,notification_sent_at')
+      .select(filters.columns||ATTENDANCE_DETAIL_COLUMNS)
       .eq('academic_year',academicYear).eq('semester',Number(semester))
+      .in('class_id',classIds)
       .order('updated_at',{ascending:true}).order('class_id',{ascending:true})
       .order('attendance_date',{ascending:true}).order('student_id',{ascending:true});
     if(since)query=query.gt('updated_at',since);
+    if(filters.studentId)query=query.eq('student_id',filters.studentId);
+    if(filters.date)query=query.eq('attendance_date',filters.date);
+    if(filters.fromDate)query=query.gte('attendance_date',filters.fromDate);
+    if(filters.toDate)query=query.lte('attendance_date',filters.toDate);
+    if(filters.notificationsOnly)query=query.not('notification_status','is',null).neq('notification_status','dismissed');
     const result=await query.range(from,from+ATTENDANCE_TABLE_PAGE_SIZE-1);
     if(result.error)throw result.error;
     const page=Array.isArray(result.data)?result.data:[];
@@ -1769,7 +1866,7 @@ async function syncAttendanceTablePeriod(academicYear,semester,{force=false}={})
   if(cache.promise){const changed=await cache.promise;return force?(await syncAttendanceTablePeriod(academicYear,semester,{force:true}))||changed:changed;}
   cache.promise=(async()=>{
     const full=force||!cache.loaded;
-    const rows=await readAttendanceTableRows(academicYear,semester,full?'':cache.lastUpdatedAt);
+    const rows=await readAttendanceTableRows(academicYear,semester,full?'':cache.lastUpdatedAt,{classIds:cache.classIds});
     const nextAttendance=full?{}:copyData(cache.attendance);
     const nextNotifications=full?{}:copyData(cache.notifications);
     const nextCache={attendance:nextAttendance,notifications:nextNotifications};
@@ -1789,7 +1886,68 @@ async function syncAttendanceTablePeriod(academicYear,semester,{force=false}={})
   })();
   try{return await cache.promise;}finally{cache.promise=null;}
 }
-window.ensureAttendancePeriodLoaded=(academicYear,semester)=>syncAttendanceTablePeriod(academicYear,String(semester));
+window.ensureAttendancePeriodLoaded=(academicYear,semester,options={})=>syncAttendanceTablePeriod(academicYear,String(semester),options);
+function attendanceDetailScopeKey(academicYear,semester,filters={}){
+  return [academicYear,String(semester),(filters.classIds||[]).slice().sort().join(','),filters.studentId||'',filters.date||'',filters.fromDate||'',filters.toDate||'',filters.notificationsOnly?'notifications':'rows'].join('|');
+}
+function clearAttendanceDetailScope(state,academicYear,semester,filters={}){
+  const sem=sharedSemester(state,academicYear,String(semester));
+  const classIds=new Set(filters.classIds||[]);
+  if(filters.notificationsOnly){
+    sem.notifications=(sem.notifications||[]).filter(item=>!classIds.has(item.classId));
+  }else{
+    classIds.forEach(classId=>{
+      if(!sem.attendance[classId])sem.attendance[classId]={};
+      if(filters.date){delete sem.attendance[classId][filters.date];return;}
+      Object.keys(sem.attendance[classId]).forEach(date=>{
+        if(filters.fromDate&&date<filters.fromDate)return;
+        if(filters.toDate&&date>filters.toDate)return;
+        if(filters.studentId)delete sem.attendance[classId][date]?.[filters.studentId];
+        else delete sem.attendance[classId][date];
+      });
+    });
+  }
+}
+function mergeAttendanceDetailRows(state,academicYear,semester,rows){
+  const sem=sharedSemester(state,academicYear,String(semester));
+  const notifications=Object.fromEntries((sem.notifications||[]).map(item=>[attendanceNotificationKey(item.classId,item.date,item.studentId),item]));
+  const target={attendance:sem.attendance,notifications};
+  rows.forEach(row=>applyAttendanceTableRow(target,row));
+  sem.notifications=Object.values(target.notifications);
+  if(state.activeAcademicYear===academicYear&&String(state.activeSemester)===String(semester)){
+    state.attendance=sem.attendance;state.notifications=sem.notifications;
+  }
+}
+async function loadAttendanceDetailScope(academicYear,semester,filters={},options={}){
+  const classIds=filters.classIds||attendanceClassIdsForPeriod(academicYear);
+  const scoped={...filters,classIds};
+  if(!classIds.length)return false;
+  const revision=lastAttendanceRevision||await readAttendanceRevision();
+  lastAttendanceRevision=revision;
+  const key=attendanceDetailScopeKey(academicYear,semester,scoped);
+  if(!options.force&&attendanceDetailScopes.get(key)===revision)return false;
+  const rows=await readAttendanceTableRows(academicYear,semester,'',scoped);
+  clearAttendanceDetailScope(db,academicYear,semester,scoped);
+  mergeAttendanceDetailRows(db,academicYear,semester,rows);
+  attendanceDetailScopes.set(key,revision);
+  if(db.activeAcademicYear===academicYear&&String(db.activeSemester)===String(semester))ensure();
+  return true;
+}
+async function loadCurrentAttendanceDay({force=false}={}){
+  const classId=document.getElementById('attClass')?.value;
+  const date=document.getElementById('attDate')?.value;
+  if(!classId||!date)return false;
+  return loadAttendanceDetailScope(db.activeAcademicYear,String(db.activeSemester),{classIds:[classId],date},{force});
+}
+async function loadCurrentAttendanceNotifications({force=false}={}){
+  return loadAttendanceDetailScope(db.activeAcademicYear,String(db.activeSemester),{
+    classIds:attendanceClassIdsForPeriod(),notificationsOnly:true
+  },{force});
+}
+window.attendanceClassIdsForPeriod=attendanceClassIdsForPeriod;
+window.fetchAttendanceRowsForReport=(academicYear,semester,filters={})=>readAttendanceTableRows(academicYear,String(semester),'',{
+  ...filters,columns:filters.includeDetails?ATTENDANCE_DETAIL_COLUMNS:ATTENDANCE_REPORT_COLUMNS
+});
 function attendanceTableRowsForBatch(batch){
   return[...batch.values()].map(patch=>{
     const notice=patch.notification;
@@ -1813,7 +1971,7 @@ async function persistAttendanceTableBatch(batch){
   const rows=attendanceTableRowsForBatch(batch);
   const result=await window.neonClient.from('attendance_entries').upsert(rows,{
     onConflict:'academic_year,semester,class_id,student_id,attendance_date'
-  }).select('academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at,notification_id,notification_method,notification_status,notification_sent_at');
+  });
   if(result.error)throw result.error;
   (result.data||rows).forEach(row=>{
     const cache=attendancePeriodCache(row.academic_year,String(row.semester));
@@ -1933,6 +2091,10 @@ function durableActivityStateIsMerged(state){
 }
 async function ensureDurableActivityState(){
   if(!window.neonClient||!user)return;
+  const projected=copyStateValue(lastConfirmedState||db||{});
+  mergeDurableActivityState(projected);
+  backfillDurableActivityState(projected);
+  if(sameStateValue(projected,lastConfirmedState||db))return;
   await commitSharedStateMutation(state=>{
     const before=copyStateValue(state);
     mergeDurableActivityState(state);
@@ -1943,6 +2105,7 @@ async function ensureDurableActivityState(){
 function ignoredGenericStatePath(path){
   const joined=path.join('.');
   return ['activeAcademicYear','activeSemester','activeProgram','classes','students','attendance','notifications','durableActivity'].includes(path[0])
+    || (path[0]==='behaviorSettings'&&!behaviorStateLoaded)
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.attendance(\.|$)/.test(joined)
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.notifications(\.|$)/.test(joined)
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.behavior\.(violations|positives|audit|nextViolationId|nextPositiveId)(\.|$)/.test(joined);
@@ -1967,6 +2130,7 @@ function collectStateOperations(base,next,path=[],operations=[]){
   if(isPlainStateObject(base)&&isPlainStateObject(next)){
     const keys=new Set([...Object.keys(base),...Object.keys(next)]);
     keys.forEach(key=>{
+      if(ignoredGenericStatePath([...path,key]))return;
       if(!Object.prototype.hasOwnProperty.call(next,key))operations.push({type:'delete',path:[...path,key]});
       else if(!Object.prototype.hasOwnProperty.call(base,key))operations.push({type:'set',path:[...path,key],value:copyStateValue(next[key])});
       else collectStateOperations(base[key],next[key],[...path,key],operations);
@@ -2164,12 +2328,11 @@ async function ensureSavedBeforeNavigation(){
 }
 window.ensureSavedBeforeNavigation=ensureSavedBeforeNavigation;
 window.addEventListener('beforeunload',event=>{if(hasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
-async function load(){
-  const stateResult=await window.neonClient.from('school_state').select('data,updated_at,updated_by').eq('singleton',true).limit(1);
-  if(stateResult.error)throw stateResult.error;
-  const row=Array.isArray(stateResult.data)?stateResult.data[0]:stateResult.data;
-  if(!row||!row.data)throw new Error('Attendance state is not initialized');
+async function load({includeBehavior=false}={}){
+  const row=await readAppSharedState(includeBehavior);
   lastServerUpdatedAt=row.updated_at||'';
+  schoolStateContentHash=row.content_hash||'';
+  behaviorStateLoaded=!!includeBehavior;
   lastConfirmedState=copyData(row.data);
   db=copyData(row.data);
   if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
@@ -2200,11 +2363,32 @@ async function load(){
   ensureAcademicModel();
   mergeDurableActivityState(db);
   restoreAcademicContext();
-  await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester),{force:true});
   hydrateActiveAcademicData();
   const notificationDefaultsChanged=applyWhatsAppNotificationDefault();
   if(permissionSchemaChanged||notificationDefaultsChanged)save();
 }
+
+async function ensureBehaviorStateLoaded(){
+  if(behaviorStateLoaded)return true;
+  if(!(await ensureSavedBeforeNavigation()))return false;
+  const currentTeachers=db.teachers;
+  const localContext=currentAcademicContext();
+  const row=await readAppSharedState(true);
+  lastServerUpdatedAt=row.updated_at||'';
+  schoolStateContentHash=row.content_hash||'';
+  lastConfirmedState=copyData(row.data);
+  db=copyData(row.data);
+  if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
+  applyPermissionSchemaMigrations();normalizeSchoolSettings();ensureAcademicModel();mergeDurableActivityState(db);
+  applyAcademicContext(localContext);hydrateActiveAcademicData();rememberAcademicContext();
+  db.teachers=currentTeachers;
+  behaviorStateLoaded=true;
+  try{await ensureDurableActivityState();}
+  catch(error){stateSaveError=error;console.warn('Durable behavior protection could not be initialized',error);}
+  window.initBehaviorModule?.();
+  return true;
+}
+window.ensureBehaviorStateLoaded=ensureBehaviorStateLoaded;
 
 async function applyRemoteAcademicState(remote){
   if(!remote?.academicYears)return;
@@ -2217,7 +2401,6 @@ async function applyRemoteAcademicState(remote){
   ensureAcademicModel();
   mergeDurableActivityState(db);
   applyAcademicContext(localContext);
-  await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester));
   hydrateActiveAcademicData();
   rememberAcademicContext();
   const notificationDefaultsChanged=applyWhatsAppNotificationDefault();
@@ -2226,10 +2409,10 @@ async function applyRemoteAcademicState(remote){
   if(document.getElementById('page-attendance')?.classList.contains('active')){
     const cls=document.getElementById('attClass')?.value;
     const date=document.getElementById('attDate')?.value;
-    if(cls&&date)loadAttTable();
+    if(cls&&date)await loadAttTable({force:true});
   }
-  if(document.getElementById('page-reports')?.classList.contains('active'))window.refreshActiveAttendanceReport?.();
-  if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
+  if(document.getElementById('page-reports')?.classList.contains('active'))await window.refreshActiveAttendanceReport?.({force:true});
+  if(document.getElementById('page-notifications')?.classList.contains('active')){await loadCurrentAttendanceNotifications({force:true});renderNotifTable();}
   applySchoolBranding();
   applyUserPermissions();
   enforceAuthenticatedPageAccess();
@@ -2273,8 +2456,18 @@ async function refreshAuthenticatedUserProfile(){
   return true;
 }
 
+async function refreshAttendanceDataAfterRevision(revision){
+  const activeName=(document.querySelector('.page.active')?.id||'').replace(/^page-/, '');
+  if(['dashboard','students','classes'].includes(activeName)||currentAttendanceSummary()){
+    await syncAttendanceSummary(db.activeAcademicYear,String(db.activeSemester),{force:true,revision});
+  }
+  if(activeName==='attendance'&&document.getElementById('attClass')?.value)await loadAttTable({force:true});
+  if(activeName==='notifications')await loadCurrentAttendanceNotifications({force:true});
+  if(activeName==='reports')await window.refreshActiveAttendanceReport?.({force:true});
+}
+
 async function pollSharedState(force=false){
-  if(!user||!window.neonClient||document.hidden||liveSyncInFlight||hasUnsavedChanges())return;
+  if(!user||!window.neonClient||!window.currentPlatformApp||document.hidden||liveSyncInFlight||hasUnsavedChanges())return;
   if(!force&&Date.now()<nextLiveSyncAttemptAt)return;
   if(!force&&Date.now()-lastLiveSyncActivityAt>=LIVE_SYNC_ACTIVITY_WINDOW_MS){
     liveSyncPaused=true;
@@ -2284,7 +2477,13 @@ async function pollSharedState(force=false){
   liveSyncPaused=false;
   liveSyncInFlight=true;
   try{
-    const attendanceChanged=await syncAttendanceTablePeriod(db.activeAcademicYear,String(db.activeSemester));
+    let attendanceChanged=false;
+    if(window.currentPlatformApp==='attendance'){
+      const revision=await readAttendanceRevision();
+      attendanceChanged=lastAttendanceRevision>0&&revision!==lastAttendanceRevision;
+      lastAttendanceRevision=revision;
+      if(attendanceChanged)await refreshAttendanceDataAfterRevision(revision);
+    }
     liveSyncFailureCount=0;
     nextLiveSyncAttemptAt=0;
     if(!force&&Date.now()-lastSharedStatePollAt<SHARED_STATE_LIVE_SYNC_MS){
@@ -2292,17 +2491,22 @@ async function pollSharedState(force=false){
       return;
     }
     lastSharedStatePollAt=Date.now();
-    const meta=await readSharedState('updated_at,updated_by');
-    if(meta.updated_at===lastServerUpdatedAt){
+    const includeBehavior=window.currentPlatformApp==='behavior';
+    const meta=includeBehavior?await readSharedState('updated_at,updated_by'):await readAppSharedState(false,true);
+    const stateUnchanged=includeBehavior?meta.updated_at===lastServerUpdatedAt:meta.content_hash===schoolStateContentHash;
+    if(stateUnchanged){
+      lastServerUpdatedAt=meta.updated_at||lastServerUpdatedAt;
       if(force)await refreshAuthenticatedUserProfile();
       if(attendanceChanged)refreshLiveAttendanceViews();
       return;
     }
-    const latest=await readSharedState();
+    const latest=includeBehavior?await readSharedState():await readAppSharedState(false);
     if(hasUnsavedChanges())return;
     if(!(await refreshAuthenticatedUserProfile()))return;
     if(hasUnsavedChanges())return;
     lastServerUpdatedAt=latest.updated_at||'';
+    schoolStateContentHash=latest.content_hash||schoolStateContentHash;
+    behaviorStateLoaded=includeBehavior;
     await applyRemoteAcademicState(latest.data);
     refreshSaveIndicator();
   }catch(error){
@@ -2318,7 +2522,6 @@ async function pollSharedState(force=false){
 function refreshLiveAttendanceViews(){
   renderDashboard();
   if(document.getElementById('page-attendance')?.classList.contains('active')&&document.getElementById('attClass')?.value)loadAttTable();
-  if(document.getElementById('page-reports')?.classList.contains('active'))window.refreshActiveAttendanceReport?.();
   if(document.getElementById('page-notifications')?.classList.contains('active'))renderNotifTable();
 }
 
@@ -2413,9 +2616,9 @@ async function connectAuthenticatedUser(sessionResult=null,requireAppChoice=fals
   document.getElementById('sbName').textContent=user.name;
   document.getElementById('sbRole').textContent=t('roles')[user.role]||user.role;
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display=user.role==='admin'?'':'none');
-  await initApp();
-  localStorage.setItem('najd_attendance_session','active');
   const savedApp=localStorage.getItem('najd_platform_app');
+  await initApp({includeBehavior:!requireAppChoice&&savedApp==='behavior'});
+  localStorage.setItem('najd_attendance_session','active');
   if(requireAppChoice||!savedApp)window.showAppChooser?.();
   else window.selectPlatformApp?.(savedApp,false);
   return true;
@@ -2487,9 +2690,9 @@ async function changeOwnPassword(){
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
-async function initApp(){
-  await load();
-  try{await ensureDurableActivityState();}
+async function initApp(options={}){
+  await load(options);
+  try{if(behaviorStateLoaded)await ensureDurableActivityState();}
   catch(error){stateSaveError=error;console.warn('Durable activity protection could not be initialized',error);}
   window.initBehaviorModule?.();
   applyLang();
@@ -2592,16 +2795,17 @@ function renderAcademicControls(){
   if(list)list.innerHTML=years.map(year=>{
     const data=db.academicYears[year];
     const isActive=year===db.activeAcademicYear;
-    const s1=countAttendanceRecords(data.semesters['1'].attendance);
-    const s2=countAttendanceRecords(data.semesters['2'].attendance);
+    const activeSummary=isActive?currentAttendanceSummary():null;
+    const s1=isActive&&String(db.activeSemester)==='1'&&activeSummary?activeSummary.totalRecords:null;
+    const s2=isActive&&String(db.activeSemester)==='2'&&activeSummary?activeSummary.totalRecords:null;
     return`<div class="setting-row" style="${isActive?'background:var(--brand-light);border-radius:var(--radius);padding:12px':''}">
       <div class="setting-info">
         <h4>🎓 ${year} ${isActive?`<span class="badge bg-b">${LANG==='ar'?'الحالية':'Active'}</span>`:''}</h4>
         <p>${Object.keys(data.students||{}).length} ${LANG==='ar'?'طالب':'students'} · ${Object.keys(data.classes||{}).length} ${LANG==='ar'?'فصل':'classes'}</p>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-        <span class="badge bg-gr">${LANG==='ar'?'الأول':'S1'}: ${s1}</span>
-        <span class="badge bg-gr">${LANG==='ar'?'الثاني':'S2'}: ${s2}</span>
+        <span class="badge bg-gr">${LANG==='ar'?'الأول':'S1'}: ${s1??'—'}</span>
+        <span class="badge bg-gr">${LANG==='ar'?'الثاني':'S2'}: ${s2??'—'}</span>
         ${isActive?'':`<button class="btn btn-out btn-xs" onclick="changeAcademicYear('${year}')">${LANG==='ar'?'فتح':'Open'}</button>`}
       </div>
     </div>`;
@@ -2615,6 +2819,12 @@ async function changeProgram(program){
   db.activeProgram=program;
   rememberAcademicContext();
   refreshAcademicViews();
+  if(window.currentPlatformApp==='attendance'){
+    const activeName=(document.querySelector('.page.active')?.id||'').replace(/^page-/, '');
+    if(['dashboard','students','classes'].includes(activeName)){await syncAttendanceSummary();refreshAcademicViews();}
+    if(activeName==='notifications'){await loadCurrentAttendanceNotifications();renderNotifTable();}
+    if(activeName==='reports')await window.refreshAttendanceReportFilters?.();
+  }
   toast(LANG==='ar'?`🏫 تم فتح البرنامج ${programLabel(program)}`:`🏫 ${programLabel(program)} program opened`);
 }
 
@@ -2641,10 +2851,15 @@ async function changeAcademicYear(year){
   syncActiveAcademicData();
   db.activeAcademicYear=year;
   db.activeSemester='1';
-  await syncAttendanceTablePeriod(db.activeAcademicYear,'1');
   hydrateActiveAcademicData();
   rememberAcademicContext();
   refreshAcademicViews();
+  if(window.currentPlatformApp==='attendance'){
+    const activeName=(document.querySelector('.page.active')?.id||'').replace(/^page-/, '');
+    if(['dashboard','students','classes'].includes(activeName)){await syncAttendanceSummary();refreshAcademicViews();}
+    if(activeName==='notifications'){await loadCurrentAttendanceNotifications();renderNotifTable();}
+    if(activeName==='reports')await window.refreshAttendanceReportFilters?.();
+  }
   toast(LANG==='ar'?`🎓 تم فتح السنة ${year}`:`🎓 Academic year ${year} opened`);
 }
 
@@ -2654,10 +2869,15 @@ async function changeSemester(semester){
   if(!(await ensureSavedBeforeNavigation())){renderAcademicControls();return;}
   syncActiveAcademicData();
   db.activeSemester=semester;
-  await syncAttendanceTablePeriod(db.activeAcademicYear,semester);
   hydrateActiveAcademicData();
   rememberAcademicContext();
   refreshAcademicViews();
+  if(window.currentPlatformApp==='attendance'){
+    const activeName=(document.querySelector('.page.active')?.id||'').replace(/^page-/, '');
+    if(['dashboard','students','classes'].includes(activeName)){await syncAttendanceSummary();refreshAcademicViews();}
+    if(activeName==='notifications'){await loadCurrentAttendanceNotifications();renderNotifTable();}
+    if(activeName==='reports')await window.refreshAttendanceReportFilters?.();
+  }
   toast(LANG==='ar'?`📘 تم فتح الفصل ${semester==='1'?'الأول':'الثاني'}`:`📘 Semester ${semester} opened`);
 }
 
@@ -2750,6 +2970,13 @@ async function goPage(name,el){
   document.getElementById('page-'+name).classList.add('active');
   if(el){el.classList.add('active');el.setAttribute('aria-current','page');}
   document.getElementById('pageTitle').textContent=t(name);
+  try{
+    if(['dashboard','students','classes'].includes(name))await syncAttendanceSummary();
+    if(name==='notifications')await loadCurrentAttendanceNotifications();
+  }catch(error){
+    console.error('Attendance page data preparation failed',error);
+    toast(LANG==='ar'?'❌ تعذر تحميل بيانات الحضور':'❌ Could not load attendance data');
+  }
   if(name==='dashboard') renderDashboard();
   if(name==='notifications'){ fillSelects(); renderNotifTable(); }
   if(name==='students') renderStuTable();
@@ -2806,21 +3033,20 @@ function openAttendanceEntryCard(type){
 }
 window.openAttendanceEntryCard=openAttendanceEntryCard;
 
-function loadAttTable(){
-  checkDup();
+async function loadAttTable(options={}){
   const cls=document.getElementById('attClass').value;
   if(cls&&!visibleClasses().some(c=>c.id===cls))return;
   const date=document.getElementById('attDate').value;
   const card=document.getElementById('attCard');
   if(!cls){card.style.display='none';return;}
+  try{await loadCurrentAttendanceDay(options);}
+  catch(error){console.error('Attendance day load failed',error);toast(LANG==='ar'?'❌ تعذر تحميل سجلات اليوم':'❌ Could not load the selected day');return;}
+  if(cls!==document.getElementById('attClass').value||date!==document.getElementById('attDate').value)return;
+  checkDup();
   card.style.display='block';
   const clsObj=db.classes[cls];
   document.getElementById('attCardTitle').textContent=`${clsObj?className(clsObj):cls} — ${date} — ${user?.name||user?.email||''}`;
   const students=visibleStudents().filter(s=>s.classId===cls).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
-  if(students.length){
-    materializeAttendanceDay(cls,date);
-    checkDup();
-  }
   const saved=(db.attendance[cls]&&db.attendance[cls][date])||{};
   let cp=0,cae=0,cau=0,ct=0,ce=0;
   students.forEach(s=>{const rec=saved[s.id];const st=rec?.status||'present';if(st==='absent'){if(normalizedAbsenceType(rec)==='unexcused')cau++;else cae++;}else if(st==='tardy')ct++;else if(st==='early')ce++;else cp++;});
@@ -3202,10 +3428,10 @@ async function saveAttRecord(){
   ensureAttRec(cls,date);
   visibleStudents().filter(s=>s.classId===cls).forEach(s=>{
     const record=db.attendance[cls][date][s.id];
-    if(!record)db.attendance[cls][date][s.id]={status:'present',note:'',...attendanceAttribution()};
-    else db.attendance[cls][date][s.id]={...record,...(record.status==='absent'?{absenceType:normalizedAbsenceType(record)}:{}),...attendanceAttribution()};
+    if(record)return;
+    db.attendance[cls][date][s.id]={status:'present',note:'',...attendanceAttribution()};
+    queueAttendancePatch(cls,date,s.id,db.attendance[cls][date][s.id]);
   });
-  visibleStudents().filter(s=>s.classId===cls).forEach(s=>queueAttendancePatch(cls,date,s.id,db.attendance[cls][date][s.id]));
   await flushAttendancePatches();
   goToDashboard();
 }
@@ -3221,6 +3447,10 @@ function attendanceRateValue(stats){
   return total>0?Math.round(attendanceCountValue(stats)/total*100):null;
 }
 function getStuStats(sid,from,to,month,year){
+  if(!from&&!to&&!month&&!year&&!window.__attendanceReportContext){
+    const summary=attendanceSummaryStudentStats(sid);
+    if(summary)return{...summary,attended:attendanceCountValue(summary),recordedDays:attendanceStatsTotal(summary),attendanceRate:attendanceRateValue(summary),absentDates:[],excusedAbsenceDates:[],unexcusedAbsenceDates:[]};
+  }
   let p=0,a=0,ae=0,au=0,tardy=0,e=0,ad=[],aed=[],aud=[];
   const permittedClassIds=user?new Set(visibleClasses().map(cls=>cls.id)):null;
   Object.entries(db.attendance).forEach(([cls,byDate])=>{
@@ -3255,6 +3485,8 @@ function dashboardAttendanceRecords(date=today()){
   return visibleClasses().flatMap(cls=>Object.entries(db.attendance?.[cls.id]?.[date]||{}).filter(([studentId])=>students.has(studentId)).map(([studentId,record])=>({class:cls,student:db.students[studentId]||{id:studentId,name:studentId},record,date})));
 }
 function dashboardStudentStats(studentId){
+  const summary=attendanceSummaryStudentStats(studentId);
+  if(summary)return summary;
   const records=visibleClasses().flatMap(cls=>Object.values(db.attendance?.[cls.id]||{}).map(byStudent=>byStudent?.[studentId]).filter(Boolean));
   return records.reduce((stats,record)=>{
     if(record.status==='absent'){stats.absent++;if(normalizedAbsenceType(record)==='unexcused')stats.unexcusedAbsence++;else stats.excusedAbsence++;}
@@ -3265,6 +3497,8 @@ function dashboardStudentStats(studentId){
   },{present:0,absent:0,excusedAbsence:0,unexcusedAbsence:0,tardy:0,early:0});
 }
 function dashboardClassAttendanceRate(cls,students){
+  const summary=attendanceSummaryClassStats(cls.id);
+  if(summary)return summary.total?Math.round(summary.attended/summary.total*100):null;
   const ids=new Set(students.filter(student=>student.classId===cls.id).map(student=>student.id));let present=0,total=0;
   Object.values(db.attendance?.[cls.id]||{}).forEach(byStudent=>Object.entries(byStudent||{}).forEach(([studentId,record])=>{if(!ids.has(studentId))return;total++;if(attendanceStatusCountsAsAttended(record.status))present++;}));
   return total?Math.round(present/total*100):null;
@@ -3314,7 +3548,7 @@ window.showDashboardDetails=showDashboardDetails;
 function dashboardAttendanceRows(items){
   return items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||a.student.name.localeCompare(b.student.name,LANG==='ar'?'ar':'en')).map(item=>[dashboardDisplayDate(item.date),item.student.name,className(item.class),dashboardStatusLabel(item.record),item.record.note||'—',item.record.updatedByName||item.record.updatedByEmail||'—',dashboardDateTime(item.record.updatedAt)]);
 }
-function openAttendanceDashboardDetails(type){
+async function openAttendanceDashboardDetails(type){
   if(!hasPermission('dashboard'))return;
   const students=visibleStudents().slice().sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en'));
   const classes=visibleClasses().slice().sort((a,b)=>className(a).localeCompare(className(b),LANG==='ar'?'ar':'en'));
@@ -3328,20 +3562,26 @@ function openAttendanceDashboardDetails(type){
   }
   const labels={present:[t('todayPresent'),'✅'],excused:[t('todayExcusedAbsence'),'✓'],unexcused:[t('todayUnexcusedAbsence'),'!'],tardy:[t('todayTardy'),'⏰'],early:[t('todayEarly'),'🕐']};
   if(!labels[type])return;
+  try{await loadAttendanceDetailScope(db.activeAcademicYear,String(db.activeSemester),{classIds:classes.map(cls=>cls.id),date:today()});}
+  catch(error){console.error('Dashboard attendance details failed',error);toast(LANG==='ar'?'❌ تعذر تحميل التفاصيل':'❌ Could not load details');return;}
   const records=dashboardAttendanceRecords().filter(item=>dashboardRecordMatches(item.record,type));
   if(!canSeeStudents){const grouped={};records.forEach(item=>{grouped[item.class.id]=(grouped[item.class.id]||0)+1;});return showDashboardDetails({icon:labels[type][1],title:labels[type][0],headers:[t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'العدد':'Count'],rows:classes.map(cls=>[className(cls),type==='present'?t('present'):type==='excused'?t('excusedAbsence'):type==='unexcused'?t('unexcusedAbsence'):type==='tardy'?t('tardy'):t('earlyLeave'),grouped[cls.id]||0])});}
   showDashboardDetails({icon:labels[type][1],title:labels[type][0],headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records)});
 }
 window.openAttendanceDashboardDetails=openAttendanceDashboardDetails;
-function openAttendanceDashboardDate(date){
+async function openAttendanceDashboardDate(date){
   if(!hasPermission('dashboard'))return;
+  try{await loadAttendanceDetailScope(db.activeAcademicYear,String(db.activeSemester),{classIds:attendanceClassIdsForPeriod(),date});}
+  catch(error){console.error('Dashboard date details failed',error);toast(LANG==='ar'?'❌ تعذر تحميل التفاصيل':'❌ Could not load details');return;}
   const records=dashboardAttendanceRecords(date);
   showDashboardDetails({icon:'📈',title:`${LANG==='ar'?'الحضور في':'Attendance on'} ${dashboardDisplayDate(date)}`,headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records)});
 }
 window.openAttendanceDashboardDate=openAttendanceDashboardDate;
-function openAttendanceDashboardClass(classId){
+async function openAttendanceDashboardClass(classId){
   if(!hasPermission('dashboard'))return;
   const cls=visibleClasses().find(item=>item.id===classId);if(!cls)return;
+  try{await loadAttendanceDetailScope(db.activeAcademicYear,String(db.activeSemester),{classIds:[classId]});}
+  catch(error){console.error('Dashboard class details failed',error);toast(LANG==='ar'?'❌ تعذر تحميل التفاصيل':'❌ Could not load details');return;}
   const studentIds=new Set(visibleStudents().filter(student=>student.classId===classId).map(student=>student.id));
   const records=Object.entries(db.attendance?.[classId]||{}).flatMap(([date,byStudent])=>Object.entries(byStudent||{}).filter(([studentId])=>studentIds.has(studentId)).map(([studentId,record])=>({class:cls,student:db.students[studentId],record,date})));
   showDashboardDetails({icon:'🏫',title:className(cls),headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records)});
@@ -3351,12 +3591,13 @@ function renderDashboard(){
   const stus=visibleStudents();
   const cls=visibleClasses();
   const tch=dashboardVisibleUsers();
-  const td=today(),todayRecords=dashboardAttendanceRecords(td);
-  const tdAE=todayRecords.filter(item=>dashboardRecordMatches(item.record,'excused')).length;
-  const tdAU=todayRecords.filter(item=>dashboardRecordMatches(item.record,'unexcused')).length;
-  const tdT=todayRecords.filter(item=>dashboardRecordMatches(item.record,'tardy')).length;
-  const tdE=todayRecords.filter(item=>dashboardRecordMatches(item.record,'early')).length;
-  const tdP=todayRecords.filter(item=>dashboardRecordMatches(item.record,'present')).length;
+  const summary=currentAttendanceSummary();
+  const td=today(),todayStats=attendanceSummaryDayStats(td);
+  const tdAE=summary?todayStats.excusedAbsence:'—';
+  const tdAU=summary?todayStats.unexcusedAbsence:'—';
+  const tdT=summary?todayStats.tardy:'—';
+  const tdE=summary?todayStats.early:'—';
+  const tdP=summary?todayStats.present:'—';
   document.getElementById('dashStats').innerHTML=[
     dashboardCard('students','b','👥',stus.length,`${t('total')} ${LANG==='ar'?'الطلاب':'Students'}`),
     dashboardCard('classes','t','🏫',cls.length,t('classes_lbl')),
@@ -3374,8 +3615,8 @@ function renderDashboard(){
     if(d.getDay()!==5&&d.getDay()!==6)schoolDays.push(new Date(d));
   }
   schoolDays.reverse().forEach(d=>{
-    const ds=d.toISOString().split('T')[0]; let p=0,tot=0;
-    dashboardAttendanceRecords(ds).forEach(item=>{tot++;if(attendanceStatusCountsAsAttended(item.record.status))p++;});
+    const ds=d.toISOString().split('T')[0];const stats=attendanceSummaryDayStats(ds);
+    const p=attendanceCountValue(stats),tot=attendanceStatsTotal(stats);
     const pct=tot>0?Math.round(p/tot*100):0;
     const days=LANG==='ar'?['أح','اث','ثل','أر','خم','جم','سب']:['Su','Mo','Tu','We','Th','Fr','Sa'];
     const chartLabel=`${dashboardDisplayDate(ds)}: ${pct}% (${tot} ${LANG==='ar'?'سجلات':'records'})`;
@@ -4358,7 +4599,10 @@ async function resetAllData(){
     if(deleted.error)throw deleted.error;
     const cache=attendancePeriodCache(academicYear,semester);
     cache.loaded=true;cache.attendance={};cache.notifications={};cache.lastUpdatedAt='';
+    [...attendanceSummaryScopes.keys()].filter(key=>key.startsWith(`${academicYear}|${semester}|`)).forEach(key=>attendanceSummaryScopes.delete(key));
+    [...attendanceDetailScopes.keys()].filter(key=>key.startsWith(`${academicYear}|${semester}|`)).forEach(key=>attendanceDetailScopes.delete(key));
     db.attendance={};Object.keys(db.classes||{}).forEach(id=>{db.attendance[id]={};});db.notifications=[];
+    await syncAttendanceSummary(academicYear,semester,{force:true});
     refreshAcademicViews();
     toast(LANG==='ar'?'🗑️ تم مسح سجلات الفصل الحالي':'🗑️ Current semester attendance cleared');
   }catch(error){

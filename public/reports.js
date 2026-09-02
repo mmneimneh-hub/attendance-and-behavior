@@ -19,17 +19,66 @@ function reportSemesterLabel(period=selectedReportAcademicPeriod()){
   return LANG==='ar'?`الفصل ${period.semester==='1'?'الأول':'الثاني'}`:`Semester ${period.semester}`;
 }
 
-async function ensureSelectedAttendanceReportPeriod(){
+let attendanceReportData={key:'',bySemester:{}};
+function reportMonthRange(academicYear,semester,month){
+  if(!month)return{};
+  const years=academicYear.split('-').map(Number);const year=String(semester)==='1'?years[0]:years[1];
+  if(!Number.isFinite(year))return{};
+  const monthNumber=Number(month);const first=`${year}-${String(monthNumber).padStart(2,'0')}-01`;
+  const last=new Date(Date.UTC(year,monthNumber,0)).toISOString().split('T')[0];
+  return{fromDate:first,toDate:last};
+}
+function reportAttendanceQuery(period,semester){
+  const id=document.querySelector('#page-reports .tp.active')?.id||'rCls';
+  let classIds=window.attendanceClassIdsForPeriod?.(period.academicYear)||[];
+  const query={classIds};
+  if(id==='rCls'){
+    const classId=document.getElementById('rClsS')?.value||'';const month=document.getElementById('rMonS')?.value||'';
+    if(classId)query.classIds=classIds.filter(id=>id===classId);Object.assign(query,reportMonthRange(period.academicYear,semester,month));
+  }else if(id==='rStu'){
+    const studentId=document.getElementById('rStuS')?.value||'';const classId=document.getElementById('rStuCls')?.value||'';
+    if(!studentId)return{...query,classIds:[],skip:true};
+    if(classId)query.classIds=classIds.filter(id=>id===classId);query.studentId=studentId;query.includeDetails=true;
+    Object.assign(query,reportMonthRange(period.academicYear,semester,document.getElementById('rStuMon')?.value||''));
+  }else if(id==='rDay'){
+    const date=document.getElementById('rDayD')?.value||'';if(!date)return{...query,classIds:[],skip:true};query.date=date;
+  }else if(id==='rPer'){
+    const classId=document.getElementById('rPerCls')?.value||'';if(classId)query.classIds=classIds.filter(id=>id===classId);
+    query.fromDate=document.getElementById('rFrom')?.value||'';query.toDate=document.getElementById('rTo')?.value||'';
+    if(!query.fromDate||!query.toDate)return{...query,classIds:[],skip:true};
+  }else if(id==='rTop'){
+    Object.assign(query,reportMonthRange(period.academicYear,semester,document.getElementById('rTopMon')?.value||''));
+  }
+  return query;
+}
+function reportAttendanceFromRows(rows){
+  const attendance={};
+  (rows||[]).forEach(row=>{
+    const byDate=attendance[row.class_id]||(attendance[row.class_id]={});
+    const byStudent=byDate[row.attendance_date]||(byDate[row.attendance_date]={});
+    byStudent[row.student_id]=attendanceRecordFromTableRow(row);
+  });
+  return attendance;
+}
+async function ensureSelectedAttendanceReportPeriod(options={}){
   const period=selectedReportAcademicPeriod();
-  if(window.ensureAttendancePeriodLoaded)await Promise.all(period.semesters.map(semester=>window.ensureAttendancePeriodLoaded(period.academicYear,semester)));
+  const queries=Object.fromEntries(period.semesters.map(semester=>[semester,reportAttendanceQuery(period,semester)]));
+  const key=JSON.stringify({period,queries});
+  if(options.force||attendanceReportData.key!==key){
+    const entries=await Promise.all(period.semesters.map(async semester=>{
+      const query=queries[semester];
+      const rows=query.skip?[]:await window.fetchAttendanceRowsForReport(period.academicYear,semester,query);
+      return[semester,reportAttendanceFromRows(rows)];
+    }));
+    attendanceReportData={key,bySemester:Object.fromEntries(entries)};
+  }
   return period;
 }
 
 function mergeReportAttendance(period){
   const merged={};const priority={present:1,tardy:2,early:3,absent:4};
-  const year=db.academicYears?.[period.academicYear];
   period.semesters.forEach(semester=>{
-    const attendance=year?.semesters?.[semester]?.attendance||{};
+    const attendance=attendanceReportData.bySemester?.[semester]||{};
     Object.entries(attendance).forEach(([classId,byDate])=>{
       const targetClass=merged[classId]||(merged[classId]={});
       Object.entries(byDate||{}).forEach(([date,byStudent])=>{
@@ -57,9 +106,9 @@ window.withAttendanceReportContext=function(callback){
   }
 };
 
-window.refreshActiveAttendanceReport=async function(){
+window.refreshActiveAttendanceReport=async function(options={}){
   if(!document.getElementById('page-reports')?.classList.contains('active'))return;
-  try{await ensureSelectedAttendanceReportPeriod();const config=activeReportConfig();config.render();}
+  try{await ensureSelectedAttendanceReportPeriod(options);const config=activeReportConfig();config.render();}
   catch(error){console.error('Attendance report refresh failed',error);toast(LANG==='ar'?'❌ تعذر تحميل بيانات التقرير':'❌ Could not load report data');}
 };
 

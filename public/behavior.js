@@ -367,6 +367,10 @@ window.selectPlatformApp=async function(appName,remember){
   if(appName!=="attendance"&&appName!=="behavior")appName="attendance";
   if(appName==="behavior"&&!appHasBehavior())appName="attendance";
   if(appName==="attendance"&&!appHasAttendance()&&appHasBehavior())appName="behavior";
+  if(appName==="behavior"&&window.ensureBehaviorStateLoaded){
+    try{if(!(await window.ensureBehaviorStateLoaded()))return;}
+    catch(error){console.error("Behavior data load failed",error);toast(tr("تعذر تحميل بيانات السلوك","Could not load behavior data"));return;}
+  }
   var chooser=document.getElementById("appChooser"),app=document.getElementById("app");
   if(chooser)chooser.style.display="none";if(app)app.style.display="block";
   if(remember)localStorage.setItem("najd_platform_app",appName);
