@@ -3872,7 +3872,7 @@ function renderStuTable(){
 // ════════════════════════════════════════════
 // CRUD STUDENTS
 // ════════════════════════════════════════════
-function saveStu(){
+async function saveStu(){
   if(!hasPermission('students_edit'))return;
   const id=document.getElementById('eStuId').value;
   if(!id&&!hasPermission('students_add')){toast(LANG==='ar'?'يمكن للمشرف تعديل بيانات الطلاب الحاليين فقط':'Supervisors can edit existing student information only');return;}
@@ -3904,8 +3904,32 @@ function saveStu(){
     parentEmail:document.getElementById('eStuEmail').value.trim()
   };
   db.students[data.id]=data;
-  save(); renderStuTable(); renderDashboard(); closeM('mStu'); toast(t('saved'));
-  setTimeout(()=>goToDashboard(),600);
+  // Keep a failed retry tied to the same local record instead of creating a
+  // second student if the user presses Save again.
+  document.getElementById('eStuId').value=data.id;
+  save();
+  try{
+    await flushStateSave({throwOnError:true});
+  }catch(error){
+    console.error('Student save failed',error);
+    toast(LANG==='ar'?'تعذر حفظ الطالب — ستتم إعادة المحاولة تلقائياً':'Could not save the student — retrying automatically');
+    return;
+  }
+  // A student may be assigned to a different program in this modal. Move the
+  // roster view to that program so the confirmed record remains visible.
+  if(requestedProgram!==db.activeProgram){
+    try{
+      await changeProgram(requestedProgram);
+    }catch(error){
+      // The student is already persisted. Keep the roster usable even when a
+      // secondary attendance-summary refresh fails after changing programs.
+      console.warn('Student roster refresh failed',error);
+      db.activeProgram=requestedProgram;
+      rememberAcademicContext();
+      refreshAcademicViews();
+    }
+  }else refreshAcademicViews();
+  closeM('mStu');toast(t('saved'));
 }
 function editStu(id){
   const s=db.students[id];if(!s)return;
