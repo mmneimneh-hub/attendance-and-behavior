@@ -1633,6 +1633,10 @@ let behaviorFlushInFlight=false;
 let behaviorFlushPromise=Promise.resolve();
 let behaviorSaveError=null;
 let attendanceSaveRetryDelay=900;
+let staffDirectoryLoaded=false;
+let staffDirectoryPromise=null;
+let staffDirectorySummary={total:0,roles:{}};
+let savedTeacherSubjectsByEmail={};
 const attendanceTablePeriods=new Map();
 const attendanceSummaryScopes=new Map();
 const attendanceDetailScopes=new Map();
@@ -1644,7 +1648,6 @@ const LIVE_SYNC_MAX_RETRY_MS=300000;
 const ATTENDANCE_STATUS_SAVE_DELAY_MS=180;
 const ATTENDANCE_NOTE_SAVE_DELAY_MS=750;
 const ATTENDANCE_DETAIL_COLUMNS='academic_year,semester,class_id,student_id,attendance_date,status,absence_type,note,updated_by,updated_by_email,updated_by_name,updated_at,notification_id,notification_method,notification_status,notification_sent_at';
-const ATTENDANCE_REPORT_COLUMNS='academic_year,semester,class_id,student_id,attendance_date,status,absence_type';
 
 function sharedStateRow(result){
   return Array.isArray(result?.data)?result.data[0]:result?.data;
@@ -1834,6 +1837,8 @@ async function readAttendanceTableRows(academicYear,semester,since='',filters={}
     if(filters.date)query=query.eq('attendance_date',filters.date);
     if(filters.fromDate)query=query.gte('attendance_date',filters.fromDate);
     if(filters.toDate)query=query.lte('attendance_date',filters.toDate);
+    if(filters.statuses?.length)query=query.in('status',filters.statuses);
+    if(filters.absenceType)query=query.eq('absence_type',filters.absenceType);
     if(filters.notificationsOnly)query=query.not('notification_status','is',null).neq('notification_status','dismissed');
     const result=await query.range(from,from+ATTENDANCE_TABLE_PAGE_SIZE-1);
     if(result.error)throw result.error;
@@ -1945,9 +1950,21 @@ async function loadCurrentAttendanceNotifications({force=false}={}){
   },{force});
 }
 window.attendanceClassIdsForPeriod=attendanceClassIdsForPeriod;
-window.fetchAttendanceRowsForReport=(academicYear,semester,filters={})=>readAttendanceTableRows(academicYear,String(semester),'',{
-  ...filters,columns:filters.includeDetails?ATTENDANCE_DETAIL_COLUMNS:ATTENDANCE_REPORT_COLUMNS
-});
+window.fetchAttendanceSummaryForReport=async(academicYear,semester,filters={})=>{
+  const fromDate=filters.date||filters.fromDate||null;
+  const toDate=filters.date||filters.toDate||null;
+  const result=await window.neonClient.rpc('attendance_report_summary',{
+    p_academic_year:academicYear,p_semester:Number(semester),p_class_ids:filters.classIds||[],
+    p_student_id:filters.studentId||null,p_from_date:fromDate,p_to_date:toDate,
+    p_include_absence_dates:!!filters.includeAbsenceDates
+  });
+  if(result.error)throw result.error;
+  const payload=Array.isArray(result.data)?result.data[0]:result.data;
+  return{students:Array.isArray(payload?.students)?payload.students:[],classes:Array.isArray(payload?.classes)?payload.classes:[]};
+};
+window.fetchAttendanceDetailRowsForReport=(academicYear,semester,filters={})=>readAttendanceTableRows(
+  academicYear,String(semester),'',{...filters,columns:ATTENDANCE_DETAIL_COLUMNS}
+);
 function attendanceTableRowsForBatch(batch){
   return[...batch.values()].map(patch=>{
     const notice=patch.notification;
@@ -2199,12 +2216,14 @@ function delayedSaveError(message){
 function adoptConfirmedState(confirmed,updatedAt=''){
   if(!confirmed)return;
   const localContext=currentAcademicContext();
+  const currentTeachers=db?.teachers||{};
   const localOperations=collectStateOperations(lastConfirmedState||{},db||{});
   const projected=applyStateOperations(copyData(confirmed),localOperations);
   behaviorMutations.forEach(mutation=>applyBehaviorMutation(projected,mutation));
   mergeDurableActivityState(projected);
   applyAttendanceTableCacheToState(projected,localContext.academicYear,localContext.semester);
   attendancePatches.forEach(patch=>applyAttendancePatch(projected,patch));
+  projected.teachers=currentTeachers;
   lastConfirmedState=copyData(confirmed);
   lastServerUpdatedAt=updatedAt||lastServerUpdatedAt;
   db=projected;
@@ -2338,6 +2357,65 @@ async function ensureSavedBeforeNavigation(){
 }
 window.ensureSavedBeforeNavigation=ensureSavedBeforeNavigation;
 window.addEventListener('beforeunload',event=>{if(hasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
+function staffAccountFromProfile(profile,registered=true){
+  const email=String(profile.email||'').toLowerCase();
+  const account=normalizeAccountPermissionSchema({
+    id:registered?profile.user_id:`inv-${email}`,email:profile.email,name:profile.full_name,role:profile.role,
+    programs:profile.programs||PROGRAMS,gradeLevels:profile.grade_levels||GRADE_LEVELS,
+    sectionPermissions:profile.section_permissions||{},active:profile.active,registered,
+    subject:savedTeacherSubjectsByEmail[email]?.subject||''
+  });
+  account.programGradeLevels=programGradeMap(account);
+  return account;
+}
+async function persistTeacherSubjectState(account,deleted=false){
+  const operation=deleted
+    ?{type:'delete',path:['teachers',account.id]}
+    :{type:'set',path:['teachers',account.id],value:{email:account.email,subject:account.subject||''}};
+  const result=await window.neonClient.rpc('apply_school_state_operations',{
+    p_operations:[operation],p_updated_by:user?.id||null
+  });
+  if(result.error)throw result.error;
+  lastConfirmedState=applyStateOperations(lastConfirmedState||{},[operation]);
+  lastServerUpdatedAt='';schoolStateContentHash='';
+}
+async function refreshStaffDirectorySummary(){
+  const result=await window.neonClient.rpc('staff_directory_summary',{
+    p_program:db.activeProgram,p_grade_levels:allowedGrades(db.activeProgram)
+  });
+  if(result.error)throw result.error;
+  const payload=Array.isArray(result.data)?result.data[0]:result.data;
+  staffDirectorySummary={total:Number(payload?.total||0),roles:payload?.roles&&typeof payload.roles==='object'?payload.roles:{}};
+  return staffDirectorySummary;
+}
+function summarizeLoadedStaffDirectory(){
+  const scoped=dashboardVisibleUsers();const roles={};
+  scoped.forEach(account=>{roles[account.role]=Number(roles[account.role]||0)+1;});
+  staffDirectorySummary={total:scoped.length,roles};
+  return staffDirectorySummary;
+}
+async function ensureStaffDirectoryLoaded(){
+  if(staffDirectoryLoaded)return true;
+  if(staffDirectoryPromise)return staffDirectoryPromise;
+  staffDirectoryPromise=(async()=>{
+    const staffResult=await window.neonClient.from('staff_profiles').select('user_id,email,full_name,role,programs,grade_levels,section_permissions,active');
+    if(staffResult.error)throw staffResult.error;
+    const accounts={};
+    (staffResult.data||[]).forEach(profile=>{const account=staffAccountFromProfile(profile,true);accounts[account.id]=account;});
+    if(user?.role==='admin'){
+      const inviteResult=await window.neonClient.from('staff_invites').select('email,full_name,role,programs,grade_levels,section_permissions,active');
+      if(inviteResult.error)throw inviteResult.error;
+      (inviteResult.data||[]).forEach(invite=>{
+        if(Object.values(accounts).some(existing=>existing.email.toLowerCase()===invite.email.toLowerCase()))return;
+        const account=staffAccountFromProfile(invite,false);accounts[account.id]=account;
+      });
+    }
+    db.teachers=accounts;staffDirectoryLoaded=true;
+    summarizeLoadedStaffDirectory();
+    return true;
+  })().finally(()=>{staffDirectoryPromise=null;});
+  return staffDirectoryPromise;
+}
 async function load({includeBehavior=false}={}){
   const row=await readAppSharedState(includeBehavior);
   lastServerUpdatedAt=row.updated_at||'';
@@ -2349,31 +2427,16 @@ async function load({includeBehavior=false}={}){
   if(db.permissions.manager&&!db.permissions.principal){db.permissions.principal=db.permissions.manager;delete db.permissions.manager;}
   const permissionSchemaChanged=applyPermissionSchemaMigrations();
   normalizeSchoolSettings();
-  const savedTeachersByEmail=Object.fromEntries(Object.values(db.teachers||{}).filter(tc=>tc.email).map(tc=>[tc.email.toLowerCase(),tc]));
-  db.teachers={};
-  const staffResult=await window.neonClient.from('staff_profiles').select('user_id,email,full_name,role,programs,grade_levels,section_permissions,active');
-  if(!staffResult.error){
-    (staffResult.data||[]).forEach(profile=>{
-      const saved=savedTeachersByEmail[profile.email.toLowerCase()];
-      const account=normalizeAccountPermissionSchema({id:profile.user_id,email:profile.email,name:profile.full_name,role:profile.role,programs:profile.programs||PROGRAMS,gradeLevels:profile.grade_levels||GRADE_LEVELS,sectionPermissions:profile.section_permissions||{},active:profile.active,registered:true,subject:saved?.subject||''});
-      account.programGradeLevels=programGradeMap(account);db.teachers[profile.user_id]=account;
-    });
-  }
-  if(user?.role==='admin'){
-    const inviteResult=await window.neonClient.from('staff_invites').select('email,full_name,role,programs,grade_levels,section_permissions,active');
-    if(!inviteResult.error){
-      (inviteResult.data||[]).forEach(invite=>{
-        if(Object.values(db.teachers).some(existing=>existing.email.toLowerCase()===invite.email.toLowerCase()))return;
-        const saved=savedTeachersByEmail[invite.email.toLowerCase()];
-        const account=normalizeAccountPermissionSchema({id:'inv-'+invite.email,email:invite.email,name:invite.full_name,role:invite.role,programs:invite.programs||PROGRAMS,gradeLevels:invite.grade_levels||GRADE_LEVELS,sectionPermissions:invite.section_permissions||{},active:invite.active,registered:false,subject:saved?.subject||''});
-        account.programGradeLevels=programGradeMap(account);db.teachers[account.id]=account;
-      });
-    }
-  }
+  savedTeacherSubjectsByEmail=Object.fromEntries(Object.values(db.teachers||{}).filter(tc=>tc.email).map(tc=>[tc.email.toLowerCase(),tc]));
+  staffDirectoryLoaded=false;staffDirectoryPromise=null;staffDirectorySummary={total:0,roles:{}};
+  const currentAccount=normalizeAccountPermissionSchema({...user,active:true,registered:true,subject:savedTeacherSubjectsByEmail[user.email.toLowerCase()]?.subject||''});
+  currentAccount.programGradeLevels=programGradeMap(currentAccount);db.teachers={[currentAccount.id]:currentAccount};
   ensureAcademicModel();
   mergeDurableActivityState(db);
   restoreAcademicContext();
   hydrateActiveAcademicData();
+  try{await refreshStaffDirectorySummary();}
+  catch(error){console.warn('Compact staff summary could not be loaded',error);}
   const notificationDefaultsChanged=applyWhatsAppNotificationDefault();
   if(permissionSchemaChanged||notificationDefaultsChanged)save();
 }
@@ -2403,6 +2466,7 @@ window.ensureBehaviorStateLoaded=ensureBehaviorStateLoaded;
 async function applyRemoteAcademicState(remote){
   if(!remote?.academicYears)return;
   const localContext=currentAcademicContext();
+  const currentTeachers=db?.teachers||{};
   lastConfirmedState=copyData(remote);
   db=copyData(remote);
   if(!db.permissions)db.permissions=copyData(DEFAULT_PERMS);
@@ -2412,6 +2476,7 @@ async function applyRemoteAcademicState(remote){
   mergeDurableActivityState(db);
   applyAcademicContext(localContext);
   hydrateActiveAcademicData();
+  db.teachers=currentTeachers;
   rememberAcademicContext();
   const notificationDefaultsChanged=applyWhatsAppNotificationDefault();
   if(permissionSchemaChanged||notificationDefaultsChanged)save();
@@ -2458,6 +2523,9 @@ async function refreshAuthenticatedUserProfile(){
   const changed=!sameStateValue(user,nextUser);
   user=nextUser;
   if(changed){
+    db.teachers[user.id]={...(db.teachers[user.id]||{}),...user,active:true,registered:true};
+    try{if(staffDirectoryLoaded)summarizeLoadedStaffDirectory();else await refreshStaffDirectorySummary();}
+    catch(error){console.warn('Compact staff summary could not be refreshed',error);}
     document.getElementById('sbName').textContent=user.name;
     document.getElementById('sbRole').textContent=t('roles')[user.role]||user.role;
     document.querySelectorAll('.admin-only').forEach(el=>el.style.display=user.role==='admin'?'':'none');
@@ -2828,6 +2896,8 @@ async function changeProgram(program){
   syncActiveAcademicData();
   db.activeProgram=program;
   rememberAcademicContext();
+  try{if(staffDirectoryLoaded)summarizeLoadedStaffDirectory();else await refreshStaffDirectorySummary();}
+  catch(error){console.warn('Compact staff summary could not be refreshed',error);}
   refreshAcademicViews();
   if(window.currentPlatformApp==='attendance'){
     const activeName=(document.querySelector('.page.active')?.id||'').replace(/^page-/, '');
@@ -2851,7 +2921,6 @@ function refreshAcademicViews(){
   const attRows=document.getElementById('attRows');
   if(attRows)attRows.innerHTML='';
   if(document.getElementById('page-notifications').classList.contains('active'))renderNotifTable();
-  window.refreshAttendanceReportFilters?.({render:false});
   window.refreshBehaviorContext?.();
 }
 
@@ -2931,7 +3000,6 @@ function fillSelects(){
   document.getElementById('rFrom').value=today().slice(0,8)+'01';
   document.getElementById('rTo').value=today();
   refreshNotificationScopeFilters(false);
-  window.refreshAttendanceReportFilters?.({render:false});
 }
 
 // ════════════════════════════════════════════
@@ -2975,6 +3043,10 @@ function applyUserPermissions(){
 async function goPage(name,el){
   if(!pageAllowed(name)){toast(LANG==='ar'?'لا تملك صلاحية لهذه الصفحة':'You do not have permission for this page');return false;}
   if(!(await ensureSavedBeforeNavigation()))return false;
+  if(['classes','teachers'].includes(name)&&!staffDirectoryLoaded){
+    try{await ensureStaffDirectoryLoaded();fillSelects();}
+    catch(error){console.error('Staff directory load failed',error);toast(LANG==='ar'?'❌ تعذر تحميل دليل المستخدمين':'❌ Could not load the user directory');return false;}
+  }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>{n.classList.remove('active');n.removeAttribute('aria-current');});
   document.getElementById('page-'+name).classList.add('active');
@@ -3457,6 +3529,11 @@ function attendanceRateValue(stats){
   return total>0?Math.round(attendanceCountValue(stats)/total*100):null;
 }
 function getStuStats(sid,from,to,month,year){
+  if(window.__attendanceReportContext&&typeof currentReportStudentStats==='function'){
+    const reportId=document.querySelector('#page-reports .tp.active')?.id||'';
+    const allClasses=reportId==='rTop'||(reportId==='rCls'&&!document.getElementById('rClsS')?.value)||(reportId==='rPer'&&!document.getElementById('rPerCls')?.value);
+    return currentReportStudentStats(sid,allClasses?'':(db.students?.[sid]?.classId||''));
+  }
   if(!from&&!to&&!month&&!year&&!window.__attendanceReportContext){
     const summary=attendanceSummaryStudentStats(sid);
     if(summary)return{...summary,attended:attendanceCountValue(summary),recordedDays:attendanceStatsTotal(summary),attendanceRate:attendanceRateValue(summary),absentDates:[],excusedAbsenceDates:[],unexcusedAbsenceDates:[]};
@@ -3562,13 +3639,17 @@ async function openAttendanceDashboardDetails(type){
   if(!hasPermission('dashboard'))return;
   const students=visibleStudents().slice().sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en'));
   const classes=visibleClasses().slice().sort((a,b)=>className(a).localeCompare(className(b),LANG==='ar'?'ar':'en'));
+  if(type==='users'&&hasPermission('teachers')&&!staffDirectoryLoaded){
+    try{await ensureStaffDirectoryLoaded();fillSelects();}
+    catch(error){console.error('Staff directory load failed',error);toast(LANG==='ar'?'❌ تعذر تحميل دليل المستخدمين':'❌ Could not load the user directory');return;}
+  }
   const users=dashboardVisibleUsers().slice().sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en'));
   const canSeeStudents=hasPermission('attendance')||hasPermission('students_edit')||hasPermission('reports');
   if(type==='students')return canSeeStudents?showDashboardDetails({icon:'👥',title:`${t('total')} ${LANG==='ar'?'الطلاب':'Students'}`,headers:[LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',t('classes_lbl'),LANG==='ar'?'الصف':'Grade'],rows:students.map(student=>[student.name,student.schoolId||'—',className(db.classes[student.classId]),classGrade(db.classes[student.classId])])}):showDashboardDetails({icon:'👥',title:`${t('total')} ${LANG==='ar'?'الطلاب':'Students'}`,headers:[t('classes_lbl'),LANG==='ar'?'الصف':'Grade',LANG==='ar'?'عدد الطلاب':'Students'],rows:classes.map(cls=>[className(cls),classGrade(cls),students.filter(student=>student.classId===cls.id).length])});
   if(type==='classes')return showDashboardDetails({icon:'🏫',title:t('classes_lbl'),headers:hasPermission('teachers')?[t('classes_lbl'),LANG==='ar'?'البرنامج':'Program',LANG==='ar'?'الصف':'Grade',LANG==='ar'?'عدد الطلاب':'Students',LANG==='ar'?'المستخدم المسؤول':'Responsible User']:[t('classes_lbl'),LANG==='ar'?'البرنامج':'Program',LANG==='ar'?'الصف':'Grade',LANG==='ar'?'عدد الطلاب':'Students'],rows:classes.map(cls=>{const row=[className(cls),programLabel(cls.program),classGrade(cls),students.filter(student=>student.classId===cls.id).length];if(hasPermission('teachers'))row.push(db.teachers?.[cls.teacherId]?.name||'—');return row;})});
   if(type==='users'){
     if(hasPermission('teachers'))return showDashboardDetails({icon:'👨‍🏫',title:t('teachers_lbl'),headers:[LANG==='ar'?'المستخدم':'User',LANG==='ar'?'الدور':'Role',LANG==='ar'?'الصفوف المسموحة':'Allowed Grades',LANG==='ar'?'الحالة':'Status'],rows:users.map(account=>[account.name,t('roles')[account.role]||account.role,programGradesFor(account,db.activeProgram).join(', ')||'—',account.registered===false?(LANG==='ar'?'بانتظار التسجيل':'Pending'):account.active===false?(LANG==='ar'?'معطل':'Inactive'):(LANG==='ar'?'نشط':'Active')])});
-    const roles={};users.forEach(account=>{roles[account.role]=(roles[account.role]||0)+1;});return showDashboardDetails({icon:'👨‍🏫',title:t('teachers_lbl'),headers:[LANG==='ar'?'الدور':'Role',LANG==='ar'?'عدد المستخدمين':'Users'],rows:Object.entries(roles).map(([role,count])=>[t('roles')[role]||role,count])});
+    const roles=staffDirectorySummary.roles||{};return showDashboardDetails({icon:'👨‍🏫',title:t('teachers_lbl'),headers:[LANG==='ar'?'الدور':'Role',LANG==='ar'?'عدد المستخدمين':'Users'],rows:Object.entries(roles).map(([role,count])=>[t('roles')[role]||role,count])});
   }
   const labels={present:[t('todayPresent'),'✅'],excused:[t('todayExcusedAbsence'),'✓'],unexcused:[t('todayUnexcusedAbsence'),'!'],tardy:[t('todayTardy'),'⏰'],early:[t('todayEarly'),'🕐']};
   if(!labels[type])return;
@@ -3611,7 +3692,7 @@ function renderDashboard(){
   document.getElementById('dashStats').innerHTML=[
     dashboardCard('students','b','👥',stus.length,`${t('total')} ${LANG==='ar'?'الطلاب':'Students'}`),
     dashboardCard('classes','t','🏫',cls.length,t('classes_lbl')),
-    dashboardCard('users','p','👨‍🏫',tch.length,t('teachers_lbl')),
+    dashboardCard('users','p','👨‍🏫',staffDirectorySummary.total||tch.length,t('teachers_lbl')),
     dashboardCard('present','g','✅',tdP,t('todayPresent')),
     dashboardCard('excused','r','✓',tdAE,t('todayExcusedAbsence')),
     dashboardCard('unexcused','r','!',tdAU,t('todayUnexcusedAbsence')),
@@ -3859,7 +3940,8 @@ async function saveTch(){
     const existing=id?db.teachers[id]:null;
     const data={id:id||(authAccount?.id)||('inv-'+email),name,email,subject:document.getElementById('eTchSubj').value.trim(),role,programs,gradeLevels,programGradeLevels,sectionPermissions,active:true,registered:isNew?true:(existing?.registered??false)};
     if(isNew)delete db.teachers['inv-'+email];
-    db.teachers[data.id]=data;save();renderTchTable();fillSelects();closeM('mTch');toast(t('saved'));
+    await persistTeacherSubjectState(data);
+    db.teachers[data.id]=data;summarizeLoadedStaffDirectory();renderTchTable();fillSelects();closeM('mTch');toast(t('saved'));
     // Update sidebar name if this is current user
     if(user&&email===user.email){user={...user,name,role,programs,gradeLevels,programGradeLevels,sectionPermissions};document.getElementById('sbName').textContent=name;applyUserPermissions();}
   }catch(e){toast(e?.message||(LANG==='ar'?'تعذر حفظ المستخدم':'Could not save user'));}
@@ -3904,7 +3986,8 @@ async function delTch(id){
   if(user&&tc.email===user.email){toast(LANG==='ar'?'لا يمكن تعطيل حسابك الحالي':'You cannot deactivate your current account');return;}
   await window.neonClient.from('staff_invites').update({active:false}).eq('email',tc.email);
   await window.neonClient.from('staff_profiles').update({active:false}).eq('email',tc.email);
-  delete db.teachers[id];save();renderTchTable();toast(t('deleted'));
+  await persistTeacherSubjectState(tc,true);
+  delete db.teachers[id];summarizeLoadedStaffDirectory();renderTchTable();toast(t('deleted'));
 }
 
 // ════════════════════════════════════════════
@@ -3951,25 +4034,39 @@ function fillRptStuList(){
   if([...sel.options].some(option=>option.value===previous))sel.value=previous;
 }
 
-function openStudentReportCard(type){
+async function openStudentReportCard(type){
   if(!hasPermission('reports'))return;
-  if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(()=>openStudentReportCard(type));
-  const studentId=document.getElementById('rStuS').value,student=db.students[studentId];if(!student||!visibleStudents().some(item=>item.id===studentId))return;
-  const month=document.getElementById('rStuMon').value;
-  const items=visibleClasses().flatMap(cls=>Object.entries(db.attendance?.[cls.id]||{}).flatMap(([date,byStudent])=>{
-    const record=byStudent?.[studentId];if(!record||month&&new Date(`${date}T00:00:00`).getMonth()+1!==Number(month))return[];
-    return[{class:cls,student,record,date}];
-  }));
   const labels={days:['📅',LANG==='ar'?'الأيام المسجلة':'Recorded Days'],present:['✅',t('present')],attended:['☑️',attendanceCountLabel()],excused:['✓',t('excusedAbsence')],unexcused:['!',t('unexcusedAbsence')],tardy:['⏰',t('tardy')],early:['🕐',t('earlyLeave')],rate:['📊',LANG==='ar'?'نسبة الحضور':'Attendance Rate']};
   if(!labels[type])return;
-  const records=['days','rate'].includes(type)?items:items.filter(item=>dashboardRecordMatches(item.record,type));
-  const present=items.filter(item=>item.record.status==='present').length;
-  const absent=items.filter(item=>item.record.status==='absent').length;
-  const tardy=items.filter(item=>item.record.status==='tardy').length;
-  const early=items.filter(item=>item.record.status==='early').length;
-  const rate=attendanceRateValue({present,absent,tardy,early});
   const period=window.__attendanceReportContext||selectedReportAcademicPeriod();
-  showDashboardDetails({icon:labels[type][0],title:`${student.name} · ${labels[type][1]}`,headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(records),summary:type==='rate'?`${rate===null?'—':`${rate}%`} · ${items.length} ${LANG==='ar'?'يوماً مسجلاً':'recorded days'}`:'',scope:dashboardScopeText(period)});
+  const year=db.academicYears?.[period.academicYear]||{classes:{},students:{}};
+  const studentId=document.getElementById('rStuS').value,student=year.students?.[studentId];
+  if(!student)return;
+  const classIds=attendanceClassIdsForPeriod(period.academicYear).filter(id=>id===student.classId);
+  const filters={classIds,studentId};
+  const statusFilters={present:['present'],attended:['present','tardy','early'],excused:['absent'],unexcused:['absent'],tardy:['tardy'],early:['early']};
+  if(statusFilters[type])filters.statuses=statusFilters[type];
+  if(type==='excused')filters.absenceType='excused';
+  if(type==='unexcused')filters.absenceType='unexcused';
+  try{
+    const pages=await Promise.all(period.semesters.map(semester=>{
+      const semesterFilters={...filters,...reportMonthRange(period.academicYear,semester,document.getElementById('rStuMon').value)};
+      return window.fetchAttendanceDetailRowsForReport(period.academicYear,semester,semesterFilters);
+    }));
+    const items=pages.flat().map(row=>({
+      class:year.classes?.[row.class_id]||{id:row.class_id,name:row.class_id},student,
+      record:attendanceRecordFromTableRow(row),date:row.attendance_date
+    }));
+    const present=items.filter(item=>item.record.status==='present').length;
+    const absent=items.filter(item=>item.record.status==='absent').length;
+    const tardy=items.filter(item=>item.record.status==='tardy').length;
+    const early=items.filter(item=>item.record.status==='early').length;
+    const rate=attendanceRateValue({present,absent,tardy,early});
+    showDashboardDetails({icon:labels[type][0],title:`${student.name} · ${labels[type][1]}`,headers:[LANG==='ar'?'التاريخ':'Date',LANG==='ar'?'الطالب':'Student',t('classes_lbl'),LANG==='ar'?'الحالة':'Status',LANG==='ar'?'ملاحظة':'Note',LANG==='ar'?'آخر تحديث بواسطة':'Updated By',LANG==='ar'?'وقت التحديث':'Updated At'],rows:dashboardAttendanceRows(items),summary:type==='rate'?`${rate===null?'—':`${rate}%`} · ${items.length} ${LANG==='ar'?'يوماً مسجلاً':'recorded days'}`:'',scope:dashboardScopeText(period)});
+  }catch(error){
+    console.error('Student report details failed',error);
+    toast(LANG==='ar'?'❌ تعذر تحميل تفاصيل التقرير':'❌ Could not load report details');
+  }
 }
 window.openStudentReportCard=openStudentReportCard;
 
@@ -4624,8 +4721,12 @@ async function resetAllData(){
 // ════════════════════════════════════════════
 // MODALS
 // ════════════════════════════════════════════
-function openM(id,preserve=false){
+async function openM(id,preserve=false){
   if(id==='mImport'&&!hasPermission('roster_import'))return;
+  if(['mCls','mTch','mImport'].includes(id)&&!staffDirectoryLoaded){
+    try{await ensureStaffDirectoryLoaded();fillSelects();}
+    catch(error){console.error('Staff directory load failed',error);toast(LANG==='ar'?'❌ تعذر تحميل دليل المستخدمين':'❌ Could not load the user directory');return;}
+  }
   document.getElementById(id).classList.add('open');
   if(preserve)return;
   if(id==='mStu'){document.getElementById('eStuId').value='';['eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach(f=>document.getElementById(f).value='');document.getElementById('eStuCls').value='';}

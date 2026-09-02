@@ -48,8 +48,9 @@ CREATE INDEX IF NOT EXISTS attendance_entries_notification_idx
   ON public.attendance_entries (academic_year, semester, class_id, notification_status)
   WHERE notification_status IS NOT NULL AND notification_status <> 'dismissed';
 
--- Attendance users do not need behavior cases, behavior audit history, or
--- behavior settings. Strip those server-side so they never cross the network.
+-- Attendance users do not need behavior cases/history or duplicate staff
+-- profile fields. Strip behavior and compact the legacy teacher map to the
+-- subject values that are not stored in staff_profiles.
 CREATE OR REPLACE FUNCTION app_private.strip_behavior_payload(payload jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -60,6 +61,7 @@ DECLARE
   cleaned jsonb;
   cleaned_years jsonb := '{}'::jsonb;
   cleaned_semesters jsonb;
+  compact_teachers jsonb;
   academic_year record;
   semester record;
 BEGIN
@@ -68,6 +70,15 @@ BEGIN
   END IF;
 
   cleaned := payload - 'behaviorSettings';
+  IF jsonb_typeof(payload -> 'teachers') = 'object' THEN
+    SELECT COALESCE(jsonb_object_agg(key, jsonb_strip_nulls(jsonb_build_object(
+      'email', value -> 'email',
+      'subject', value -> 'subject'
+    ))), '{}'::jsonb)
+    INTO compact_teachers
+    FROM jsonb_each(payload -> 'teachers');
+    cleaned := jsonb_set(cleaned, '{teachers}', compact_teachers, true);
+  END IF;
   IF jsonb_typeof(payload -> 'academicYears') = 'object' THEN
     FOR academic_year IN SELECT key, value FROM jsonb_each(payload -> 'academicYears') LOOP
       IF jsonb_typeof(academic_year.value -> 'semesters') = 'object' THEN
@@ -332,6 +343,145 @@ $$;
 
 REVOKE ALL ON FUNCTION public.attendance_period_summary(text, smallint, text[], date[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.attendance_period_summary(text, smallint, text[], date[]) TO authenticated;
+
+-- Reports display grouped counts and absence dates. Aggregate those values in
+-- Postgres so month, semester, and year reports do not transfer one row for
+-- every student-day to the browser.
+CREATE OR REPLACE FUNCTION public.attendance_report_summary(
+  p_academic_year text,
+  p_semester smallint,
+  p_class_ids text[],
+  p_student_id text DEFAULT NULL,
+  p_from_date date DEFAULT NULL,
+  p_to_date date DEFAULT NULL,
+  p_include_absence_dates boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
+WITH scoped AS (
+  SELECT class_id, student_id, attendance_date, status, absence_type
+  FROM public.attendance_entries
+  WHERE academic_year = p_academic_year
+    AND semester = p_semester
+    AND class_id = ANY (COALESCE(p_class_ids, ARRAY[]::text[]))
+    AND (p_student_id IS NULL OR student_id = p_student_id)
+    AND (p_from_date IS NULL OR attendance_date >= p_from_date)
+    AND (p_to_date IS NULL OR attendance_date <= p_to_date)
+), student_stats AS (
+  SELECT
+    class_id,
+    student_id,
+    count(*) FILTER (WHERE status = 'present') AS present,
+    count(*) FILTER (WHERE status = 'absent') AS absent,
+    count(*) FILTER (WHERE status = 'absent' AND absence_type = 'excused') AS excused_absence,
+    count(*) FILTER (WHERE status = 'absent' AND absence_type = 'unexcused') AS unexcused_absence,
+    count(*) FILTER (WHERE status = 'tardy') AS tardy,
+    count(*) FILTER (WHERE status = 'early') AS early,
+    COALESCE(
+      jsonb_agg(attendance_date ORDER BY attendance_date)
+        FILTER (WHERE p_include_absence_dates AND status = 'absent' AND absence_type = 'excused'),
+      '[]'::jsonb
+    ) AS excused_absence_dates,
+    COALESCE(
+      jsonb_agg(attendance_date ORDER BY attendance_date)
+        FILTER (WHERE p_include_absence_dates AND status = 'absent' AND absence_type = 'unexcused'),
+      '[]'::jsonb
+    ) AS unexcused_absence_dates
+  FROM scoped
+  GROUP BY class_id, student_id
+), class_stats AS (
+  SELECT
+    class_id,
+    count(*) FILTER (WHERE status = 'present') AS present,
+    count(*) FILTER (WHERE status = 'absent') AS absent,
+    count(*) FILTER (WHERE status = 'absent' AND absence_type = 'excused') AS excused_absence,
+    count(*) FILTER (WHERE status = 'absent' AND absence_type = 'unexcused') AS unexcused_absence,
+    count(*) FILTER (WHERE status = 'tardy') AS tardy,
+    count(*) FILTER (WHERE status = 'early') AS early
+  FROM scoped
+  GROUP BY class_id
+)
+SELECT jsonb_build_object(
+  'students', COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+      'classId', class_id,
+      'studentId', student_id,
+      'present', present,
+      'absent', absent,
+      'excusedAbsence', excused_absence,
+      'unexcusedAbsence', unexcused_absence,
+      'tardy', tardy,
+      'early', early,
+      'excusedAbsenceDates', excused_absence_dates,
+      'unexcusedAbsenceDates', unexcused_absence_dates
+    ) ORDER BY class_id, student_id)
+    FROM student_stats
+  ), '[]'::jsonb),
+  'classes', COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+      'classId', class_id,
+      'present', present,
+      'absent', absent,
+      'excusedAbsence', excused_absence,
+      'unexcusedAbsence', unexcused_absence,
+      'tardy', tardy,
+      'early', early
+    ) ORDER BY class_id)
+    FROM class_stats
+  ), '[]'::jsonb)
+)
+$$;
+
+REVOKE ALL ON FUNCTION public.attendance_report_summary(text, smallint, text[], text, date, date, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.attendance_report_summary(text, smallint, text[], text, date, date, boolean) TO authenticated;
+
+-- The attendance dashboard needs staff counts, while full user records are
+-- only required on class/user-management screens. Return a tiny role summary
+-- for the normal login path, including pending invites only for admins whose
+-- RLS policy permits them to read those rows.
+CREATE OR REPLACE FUNCTION public.staff_directory_summary(
+  p_program text,
+  p_grade_levels text[]
+)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
+WITH directory AS (
+  SELECT email, role, programs, grade_levels
+  FROM public.staff_profiles
+  UNION ALL
+  SELECT invite.email, invite.role, invite.programs, invite.grade_levels
+  FROM public.staff_invites AS invite
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.staff_profiles AS profile
+    WHERE lower(profile.email) = lower(invite.email)
+  )
+), scoped AS (
+  SELECT role
+  FROM directory
+  WHERE p_program = ANY (programs)
+    AND grade_levels && COALESCE(p_grade_levels, ARRAY[]::text[])
+), role_counts AS (
+  SELECT role, count(*) AS total
+  FROM scoped
+  GROUP BY role
+)
+SELECT jsonb_build_object(
+  'total', (SELECT count(*) FROM scoped),
+  'roles', COALESCE((SELECT jsonb_object_agg(role, total) FROM role_counts), '{}'::jsonb)
+)
+$$;
+
+REVOKE ALL ON FUNCTION public.staff_directory_summary(text, text[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.staff_directory_summary(text, text[]) TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
 

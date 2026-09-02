@@ -38,7 +38,7 @@ function reportAttendanceQuery(period,semester){
   }else if(id==='rStu'){
     const studentId=document.getElementById('rStuS')?.value||'';const classId=document.getElementById('rStuCls')?.value||'';
     if(!studentId)return{...query,classIds:[],skip:true};
-    if(classId)query.classIds=classIds.filter(id=>id===classId);query.studentId=studentId;query.includeDetails=true;
+    if(classId)query.classIds=classIds.filter(id=>id===classId);query.studentId=studentId;query.includeAbsenceDates=true;
     Object.assign(query,reportMonthRange(period.academicYear,semester,document.getElementById('rStuMon')?.value||''));
   }else if(id==='rDay'){
     const date=document.getElementById('rDayD')?.value||'';if(!date)return{...query,classIds:[],skip:true};query.date=date;
@@ -51,14 +51,23 @@ function reportAttendanceQuery(period,semester){
   }
   return query;
 }
-function reportAttendanceFromRows(rows){
-  const attendance={};
-  (rows||[]).forEach(row=>{
-    const byDate=attendance[row.class_id]||(attendance[row.class_id]={});
-    const byStudent=byDate[row.attendance_date]||(byDate[row.attendance_date]={});
-    byStudent[row.student_id]=attendanceRecordFromTableRow(row);
-  });
-  return attendance;
+const REPORT_STAT_KEYS=['present','absent','excusedAbsence','unexcusedAbsence','tardy','early'];
+function normalizedReportStats(value={}){
+  const stats=Object.fromEntries(REPORT_STAT_KEYS.map(key=>[key,Number(value?.[key]||0)]));
+  stats.excusedAbsenceDates=Array.isArray(value?.excusedAbsenceDates)?value.excusedAbsenceDates.map(String):[];
+  stats.unexcusedAbsenceDates=Array.isArray(value?.unexcusedAbsenceDates)?value.unexcusedAbsenceDates.map(String):[];
+  stats.absentDates=[...new Set([...stats.excusedAbsenceDates,...stats.unexcusedAbsenceDates])].sort();
+  stats.attended=attendanceCountValue(stats);
+  stats.recordedDays=attendanceStatsTotal(stats);
+  stats.attendanceRate=attendanceRateValue(stats);
+  return stats;
+}
+function mergeReportStats(target={},source={}){
+  const merged={};
+  REPORT_STAT_KEYS.forEach(key=>{merged[key]=Number(target?.[key]||0)+Number(source?.[key]||0);});
+  merged.excusedAbsenceDates=[...new Set([...(target?.excusedAbsenceDates||[]),...(source?.excusedAbsenceDates||[])].map(String))].sort();
+  merged.unexcusedAbsenceDates=[...new Set([...(target?.unexcusedAbsenceDates||[]),...(source?.unexcusedAbsenceDates||[])].map(String))].sort();
+  return normalizedReportStats(merged);
 }
 async function ensureSelectedAttendanceReportPeriod(options={}){
   const period=selectedReportAcademicPeriod();
@@ -67,30 +76,35 @@ async function ensureSelectedAttendanceReportPeriod(options={}){
   if(options.force||attendanceReportData.key!==key){
     const entries=await Promise.all(period.semesters.map(async semester=>{
       const query=queries[semester];
-      const rows=query.skip?[]:await window.fetchAttendanceRowsForReport(period.academicYear,semester,query);
-      return[semester,reportAttendanceFromRows(rows)];
+      const summary=query.skip?{students:[],classes:[]}:await window.fetchAttendanceSummaryForReport(period.academicYear,semester,query);
+      return[semester,summary];
     }));
     attendanceReportData={key,bySemester:Object.fromEntries(entries)};
   }
   return period;
 }
 
-function mergeReportAttendance(period){
-  const merged={};const priority={present:1,tardy:2,early:3,absent:4};
+function mergeAttendanceReportSummary(period){
+  const students={};const classes={};
   period.semesters.forEach(semester=>{
-    const attendance=attendanceReportData.bySemester?.[semester]||{};
-    Object.entries(attendance).forEach(([classId,byDate])=>{
-      const targetClass=merged[classId]||(merged[classId]={});
-      Object.entries(byDate||{}).forEach(([date,byStudent])=>{
-        const targetDay=targetClass[date]||(targetClass[date]={});
-        Object.entries(byStudent||{}).forEach(([studentId,record])=>{
-          const previous=targetDay[studentId];
-          if(!previous||(priority[record?.status]||0)>=(priority[previous?.status]||0))targetDay[studentId]=copyData(record);
-        });
-      });
+    const summary=attendanceReportData.bySemester?.[semester]||{students:[],classes:[]};
+    (summary.students||[]).forEach(item=>{
+      const key=`${item.classId}|${item.studentId}`;
+      students[key]={classId:item.classId,studentId:item.studentId,...mergeReportStats(students[key],item)};
+    });
+    (summary.classes||[]).forEach(item=>{
+      classes[item.classId]={classId:item.classId,...mergeReportStats(classes[item.classId],item)};
     });
   });
-  return merged;
+  return{students,classes};
+}
+function currentReportStudentStats(studentId,classId=''){
+  const summary=window.__attendanceReportSummary?.students||{};
+  if(classId)return normalizedReportStats(summary[`${classId}|${studentId}`]);
+  return Object.values(summary).filter(item=>item.studentId===studentId).reduce((stats,item)=>mergeReportStats(stats,item),normalizedReportStats());
+}
+function currentReportClassStats(classId){
+  return normalizedReportStats(window.__attendanceReportSummary?.classes?.[classId]);
 }
 
 window.withAttendanceReportContext=function(callback){
@@ -98,11 +112,13 @@ window.withAttendanceReportContext=function(callback){
   syncActiveAcademicData();
   const period=selectedReportAcademicPeriod();
   const year=db.academicYears?.[period.academicYear]||{classes:{},students:{}};
-  const saved={classes:db.classes,students:db.students,attendance:db.attendance,activeAcademicYear:db.activeAcademicYear,activeSemester:db.activeSemester};
-  db.classes=copyData(year.classes||{});db.students=copyData(year.students||{});db.attendance=mergeReportAttendance(period);
+  const saved={classes:db.classes,students:db.students,activeAcademicYear:db.activeAcademicYear,activeSemester:db.activeSemester};
+  db.classes=copyData(year.classes||{});db.students=copyData(year.students||{});
   db.activeAcademicYear=period.academicYear;db.activeSemester=period.semester;window.__attendanceReportContext=period;
+  window.__attendanceReportSummary=mergeAttendanceReportSummary(period);
   try{return callback(period);}finally{
-    db.classes=saved.classes;db.students=saved.students;db.attendance=saved.attendance;db.activeAcademicYear=saved.activeAcademicYear;db.activeSemester=saved.activeSemester;delete window.__attendanceReportContext;
+    db.classes=saved.classes;db.students=saved.students;db.activeAcademicYear=saved.activeAcademicYear;db.activeSemester=saved.activeSemester;
+    delete window.__attendanceReportContext;delete window.__attendanceReportSummary;
   }
 };
 
@@ -175,17 +191,7 @@ function reportRating(stats){
 
 function classDailyReportStats(cls,date){
   const students=visibleStudents().filter(student=>student.classId===cls.id);
-  const daily=db.attendance?.[cls.id]?.[date]||{};
-  const stats={present:0,absent:0,excusedAbsence:0,unexcusedAbsence:0,tardy:0,early:0};
-  students.forEach(student=>{
-    const record=daily[student.id];if(!record)return;
-    if(record.status==='absent'){
-      stats.absent++;
-      if(normalizedAbsenceType(record)==='unexcused')stats.unexcusedAbsence++;else stats.excusedAbsence++;
-    }else if(record.status==='tardy')stats.tardy++;
-    else if(record.status==='early')stats.early++;
-    else stats.present++;
-  });
+  const stats=currentReportClassStats(cls.id);
   return{...stats,attended:attendanceCountValue(stats),studentCount:students.length,recordedDays:attendanceStatsTotal(stats),attendanceRate:attendanceRateValue(stats)};
 }
 
@@ -222,7 +228,9 @@ function appendStudentStats(rows,classes,from,to,month,year,includeRating=false)
     if(!classStudents.length)return;
     rows.push([className(cls)]);rows.push(reportStudentHeader(includeRating));
     classStudents.forEach(student=>{
-      const stats=getStuStats(student.id,from||null,to||null,month||null,year||null);
+      const reportId=document.querySelector('#page-reports .tp.active')?.id||'';
+      const allClasses=(reportId==='rCls'&&!document.getElementById('rClsS')?.value)||(reportId==='rPer'&&!document.getElementById('rPerCls')?.value);
+      const stats=currentReportStudentStats(student.id,allClasses?'':cls.id);
       const row=[student.name,student.schoolId||'',stats.present,stats.attended,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)];
       if(includeRating)row.push(reportRating(stats));
       rows.push(row);
@@ -245,7 +253,7 @@ function classReportRows(){
 function studentReportRows(){
   const student=db.students[document.getElementById('rStuS').value];if(!student)return[];
   const month=document.getElementById('rStuMon').value;
-  const cls=db.classes[student.classId];const stats=getStuStats(student.id,null,null,month||null,null);
+  const cls=db.classes[student.classId];const stats=currentReportStudentStats(student.id,student.classId);
   const rows=reportContextRows([[LANG==='ar'?'الفترة':'Period',reportMonthLabel(month)]]);
   rows.push(
     [LANG==='ar'?'الطالب':'Student',student.name],
@@ -290,7 +298,7 @@ function topAbsentReportRows(){
   const rows=reportContextRows([[LANG==='ar'?'الفترة':'Period',reportMonthLabel(month)]]);
   rows.push(['#',LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',LANG==='ar'?'الفصل':'Class',attendanceCountLabel(),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'التقييم':'Rating']);
   visibleStudents()
-    .map(student=>({student,stats:getStuStats(student.id,null,null,month||null,null),cls:db.classes[student.classId]}))
+    .map(student=>({student,stats:currentReportStudentStats(student.id),cls:db.classes[student.classId]}))
     .filter(item=>item.stats.absent>0||item.stats.tardy>0||item.stats.early>0)
     .sort((a,b)=>b.stats.absent-a.stats.absent||b.stats.tardy-a.stats.tardy||b.stats.early-a.stats.early)
     .forEach((item,index)=>rows.push([index+1,item.student.name,item.student.schoolId||'',item.cls?className(item.cls):item.student.classId,item.stats.attended,item.stats.excusedAbsence,item.stats.unexcusedAbsence,item.stats.tardy,item.stats.early,reportRating(item.stats)]));
