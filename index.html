@@ -824,7 +824,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
             <select id="stuClsF" onchange="renderStuTable()"><option value="" data-ar="كل الفصول" data-en="All Classes">كل الفصول</option></select>
           </div>
           <div class="tw"><table>
-            <thead><tr><th>#</th><th data-ar="الاسم" data-en="Name">الاسم</th><th data-ar="الرقم المدرسي" data-en="School ID">الرقم المدرسي</th><th data-ar="الفصل" data-en="Class">الفصل</th><th data-ar="ولي الأمر" data-en="Guardian">ولي الأمر</th><th data-ar="الجوال" data-en="Mobile">الجوال</th><th data-ar="البريد" data-en="Email">البريد</th><th data-ar="غياب بعذر" data-en="Excused">غياب بعذر</th><th data-ar="غياب بدون عذر" data-en="Unexcused">غياب بدون عذر</th><th data-ar="إجراءات" data-en="Actions">إجراءات</th></tr></thead>
+            <thead><tr><th>#</th><th data-ar="الاسم" data-en="Name">الاسم</th><th data-ar="الرقم المدرسي" data-en="School ID">الرقم المدرسي</th><th data-ar="البرنامج" data-en="Program">البرنامج</th><th data-ar="الفصل / الحالة" data-en="Class / Status">الفصل / الحالة</th><th data-ar="ولي الأمر" data-en="Guardian">ولي الأمر</th><th data-ar="الجوال" data-en="Mobile">الجوال</th><th data-ar="البريد" data-en="Email">البريد</th><th data-ar="غياب بعذر" data-en="Excused">غياب بعذر</th><th data-ar="غياب بدون عذر" data-en="Unexcused">غياب بدون عذر</th><th data-ar="إجراءات" data-en="Actions">إجراءات</th></tr></thead>
             <tbody id="stuTbody"></tbody>
           </table></div>
         </div>
@@ -1035,11 +1035,13 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
     <div class="fg">
       <div class="ff"><label data-ar="اسم الطالب *" data-en="Student Name *">اسم الطالب *</label><input type="text" id="eStuName"></div>
       <div class="ff"><label data-ar="الرقم المدرسي" data-en="School ID">الرقم المدرسي</label><input type="text" id="eStuSid"></div>
-      <div class="ff"><label data-ar="الفصل *" data-en="Class *">الفصل *</label><select id="eStuCls"></select></div>
+      <div class="ff"><label data-ar="البرنامج *" data-en="Program *">البرنامج *</label><select id="eStuProgram" onchange="syncStudentClassOptions()"></select></div>
+      <div class="ff"><label data-ar="الفصل / الحالة *" data-en="Class / Status *">الفصل / الحالة *</label><select id="eStuCls"></select></div>
       <div class="ff"><label data-ar="اسم ولي الأمر" data-en="Guardian Name">اسم ولي الأمر</label><input type="text" id="eStuPar" placeholder="الاسم الكامل"></div>
       <div class="ff"><label data-ar="جوال ولي الأمر" data-en="Guardian Mobile">جوال ولي الأمر</label><input type="tel" id="eStuPhone" placeholder="05xxxxxxxx"></div>
       <div class="ff"><label data-ar="بريد ولي الأمر" data-en="Guardian Email">بريد ولي الأمر</label><input type="email" id="eStuEmail" placeholder="parent@email.com"></div>
     </div>
+    <div class="alert alert-i" style="display:block;margin:12px 0 0" data-ar="عند اختيار «بدون فصل / غادر المدرسة»، يُستبعد الطالب من الحضور اليومي مع الاحتفاظ بجميع سجلاته وتقاريره السابقة." data-en="Selecting “No class / Left school” removes the student from daily attendance while preserving all previous records and reports.">عند اختيار «بدون فصل / غادر المدرسة»، يُستبعد الطالب من الحضور اليومي مع الاحتفاظ بجميع سجلاته وتقاريره السابقة.</div>
     <div class="ma">
       <button class="btn btn-p" onclick="saveStu()">💾 <span data-ar="حفظ" data-en="Save">حفظ</span></button>
       <button class="btn btn-gr" onclick="closeM('mStu')"><span data-ar="إلغاء" data-en="Cancel">إلغاء</span></button>
@@ -1451,6 +1453,47 @@ function visibleClasses(){
 }
 function visibleStudents(){const ids=new Set(visibleClasses().map(c=>c.id));return Object.values(db.students||{}).filter(s=>ids.has(s.classId));}
 function programLabel(program){return LANG==='ar'?(program==='international'?'الدولي':'الأهلي'):(program==='international'?'International':'National');}
+function studentNoClassLabel(){return LANG==='ar'?'بدون فصل / غادر المدرسة':'No class / Left school';}
+function studentClassHistory(student){
+  return[...new Set((Array.isArray(student?.classHistory)?student.classHistory:[]).map(item=>typeof item==='string'?item:item?.classId).filter(Boolean).map(String))];
+}
+function studentClassIds(student){return[...new Set([student?.classId,...studentClassHistory(student)].filter(Boolean).map(String))];}
+function studentHasClass(student,classId){return!!classId&&studentClassIds(student).includes(String(classId));}
+function studentCurrentProgram(student){
+  const current=db.classes?.[student?.classId];
+  if(current){normalizeClassScope(current);return current.program;}
+  if(PROGRAMS.includes(student?.program))return student.program;
+  const previous=studentClassHistory(student).slice().reverse().map(id=>db.classes?.[id]).find(Boolean);
+  if(previous){normalizeClassScope(previous);return previous.program;}
+  return'national';
+}
+function studentCurrentGrade(student){
+  const current=db.classes?.[student?.classId];
+  if(current)return classGrade(current);
+  if(GRADE_LEVELS.includes(String(student?.gradeLevel||'')))return String(student.gradeLevel);
+  const previous=studentClassHistory(student).slice().reverse().map(id=>db.classes?.[id]).find(Boolean);
+  return previous?classGrade(previous):'';
+}
+function manageableStudents(){
+  return Object.values(db.students||{}).filter(student=>{
+    const program=studentCurrentProgram(student);const grade=studentCurrentGrade(student);
+    return program===db.activeProgram&&allowedPrograms().includes(program)&&(!grade||allowedGrades(program).includes(grade));
+  });
+}
+function studentReportClassIds(student,academicYear=db.activeAcademicYear){
+  const permitted=new Set(attendanceClassIdsForPeriod(academicYear));
+  return studentClassIds(student).filter(classId=>permitted.has(classId));
+}
+function reportableStudents(){
+  const manageable=new Set(manageableStudents().map(student=>student.id));
+  return Object.values(db.students||{}).filter(student=>manageable.has(student.id)||studentReportClassIds(student).length>0);
+}
+function studentPlacementLabel(student){
+  const cls=db.classes?.[student?.classId];
+  if(studentCurrentProgram(student)!==db.activeProgram)return LANG==='ar'?'انتقل إلى برنامج آخر':'Moved to another program';
+  return cls?className(cls):studentNoClassLabel();
+}
+window.studentReportClassIds=studentReportClassIds;
 function sectionLabel(section){
   const labels={dashboard:['لوحة الحضور','Attendance Dashboard'],attendance:['الحضور','Attendance'],students_edit:['الطلاب','Students'],classes:['الفصول','Classes'],teachers:['المستخدمون','Users'],reports:['تقارير الحضور','Attendance Reports'],notifications:['الإشعارات','Notifications'],behavior_dashboard:['لوحة السلوك','Behavior Dashboard'],behavior_record:['تسجيل السلوك','Record Behavior'],behavior_manage:['إدارة حالات السلوك','Behavior Cases'],behavior_reports:['تقارير السلوك','Behavior Reports'],behavior_reference:['أدلة السلوك','Behavior Guides'],permissions:['الصلاحيات','Permissions'],settings:['الإعدادات','Settings']};
   return labels[section]?.[LANG==='ar'?0:1]||section;
@@ -1742,8 +1785,13 @@ function normalizeAttendanceStats(value={}){
   return stats;
 }
 function attendanceSummaryStudentStats(studentId){
-  const item=currentAttendanceSummary()?.students?.find(entry=>entry.studentId===studentId);
-  return item?normalizeAttendanceStats(item):null;
+  const items=currentAttendanceSummary()?.students?.filter(entry=>entry.studentId===studentId)||[];
+  if(!items.length)return null;
+  return items.reduce((total,item)=>{
+    const stats=normalizeAttendanceStats(item);
+    Object.keys(total).forEach(key=>{total[key]+=stats[key];});
+    return total;
+  },emptyAttendanceStats());
 }
 function attendanceSummaryClassStats(classId){
   const item=currentAttendanceSummary()?.classes?.find(entry=>entry.classId===classId);
@@ -2985,6 +3033,19 @@ function addAcademicYear(){
 // ════════════════════════════════════════════
 // FILL SELECTS
 // ════════════════════════════════════════════
+function syncStudentClassOptions(selectedClass=null){
+  const programSelect=document.getElementById('eStuProgram');
+  const classSelect=document.getElementById('eStuCls');
+  if(!programSelect||!classSelect)return;
+  const programs=allowedPrograms();
+  const program=programs.includes(programSelect.value)?programSelect.value:(programs.includes(db.activeProgram)?db.activeProgram:(programs[0]||'national'));
+  programSelect.innerHTML=programs.map(item=>`<option value="${item}" ${item===program?'selected':''}>${programLabel(item)}</option>`).join('');
+  const previous=selectedClass===null?classSelect.value:selectedClass;
+  const classes=Object.values(db.classes||{}).map(normalizeClassScope).filter(cls=>cls.program===program&&allowedGrades(program).includes(classGrade(cls))).sort((a,b)=>className(a).localeCompare(className(b),LANG==='ar'?'ar':'en'));
+  const label=cls=>`${className(cls)} · ${programLabel(cls.program)} · ${LANG==='ar'?'صف':'Grade'} ${classGrade(cls)}`;
+  classSelect.innerHTML=`<option value="__select__">${LANG==='ar'?'— اختر الفصل أو الحالة —':'— Select class or status —'}</option>`+classes.map(cls=>`<option value="${cls.id}">${label(cls)}</option>`).join('')+`<option value="__no_class__">${studentNoClassLabel()}</option>`;
+  classSelect.value=previous==='__no_class__'||classes.some(cls=>cls.id===previous)?previous:'__select__';
+}
 function fillSelects(){
   const cls=visibleClasses();
   const tch=Object.values(db.teachers).filter(tc=>(tc.programs||PROGRAMS).includes(db.activeProgram));
@@ -2992,8 +3053,11 @@ function fillSelects(){
   const clsOpt = ()=>`<option value="">${LANG==='ar'?'كل الفصول':'All Classes'}</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
   const clsReq = ()=>`<option value="">—</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
   const tchOpt = ()=>`<option value="">—</option>`+tch.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  ['attClass','eStuCls','rStuCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=id==='attClass'||id==='rStuCls'?clsReq():clsOpt(); });
-  ['stuClsF','rClsS','rPerCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsOpt(); });
+  ['attClass'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsReq(); });
+  const reportStudentClass=document.getElementById('rStuCls');
+  if(reportStudentClass)reportStudentClass.innerHTML=`<option value="">${LANG==='ar'?'كل الفصول / بدون فصل':'All classes / No class'}</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
+  ['stuClsF','rClsS','rPerCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsOpt()+(id==='stuClsF'?`<option value="__no_class__">${studentNoClassLabel()}</option>`:''); });
+  syncStudentClassOptions();
   ['eClsTch'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=tchOpt(); });
   ['rMonS','rStuMon','rTopMon'].forEach(id=>{ const el=document.getElementById(id);if(el){const m=LANG==='ar'?MONTHS_AR:MONTHS_EN;el.innerHTML=`<option value="">${LANG==='ar'?'كل الأشهر':'All Months'}</option>`+m.map((mn,i)=>`<option value="${i+1}">${mn}</option>`).join('');} });
   document.getElementById('rDayD').value=today();
@@ -3531,6 +3595,7 @@ function attendanceRateValue(stats){
 function getStuStats(sid,from,to,month,year){
   if(window.__attendanceReportContext&&typeof currentReportStudentStats==='function'){
     const reportId=document.querySelector('#page-reports .tp.active')?.id||'';
+    if(reportId==='rStu')return currentReportStudentStats(sid,document.getElementById('rStuCls')?.value||'');
     const allClasses=reportId==='rTop'||(reportId==='rCls'&&!document.getElementById('rClsS')?.value)||(reportId==='rPer'&&!document.getElementById('rPerCls')?.value);
     return currentReportStudentStats(sid,allClasses?'':(db.students?.[sid]?.classId||''));
   }
@@ -3778,24 +3843,27 @@ function renderTchTable(){
 function renderStuTable(){
   const srch=document.getElementById('stuSrch').value.toLowerCase();
   const cf=document.getElementById('stuClsF').value;
-  const stus=visibleStudents().filter(s=>{
-    if(cf&&s.classId!==cf)return false;
+  const stus=manageableStudents().filter(s=>{
+    if(cf==='__no_class__'&&s.classId)return false;
+    if(cf&&cf!=='__no_class__'&&s.classId!==cf)return false;
     if(srch&&!s.name.toLowerCase().includes(srch)&&!(s.schoolId||'').toLowerCase().includes(srch))return false;
     return true;
-  });
+  }).sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en'));
   document.getElementById('stuTbody').innerHTML=stus.map((s,i)=>{
-    const cls=db.classes[s.classId]; const st=getStuStats(s.id);
+    const cls=db.classes[s.classId];const st=getStuStats(s.id);const program=studentCurrentProgram(s);
+    const priorClasses=studentReportClassIds(s).filter(id=>id!==s.classId).map(id=>db.classes[id]?className(db.classes[id]):id).join(' · ');
     return`<tr><td style="color:var(--slate-400)">${i+1}</td>
     <td style="font-weight:600">${s.name}</td>
     <td style="font-size:.79rem;color:var(--slate-400)">${s.schoolId||'—'}</td>
-    <td><span class="badge bg-b">${cls?className(cls):s.classId}</span></td>
+    <td><span class="badge ${program==='international'?'bg-p':'bg-b'}">${programLabel(program)}</span></td>
+    <td><span class="badge ${cls?'bg-b':'bg-gr'}" ${priorClasses?`title="${LANG==='ar'?'الفصول السابقة':'Previous classes'}: ${escapeImportHtml(priorClasses)}"`:''}>${cls?className(cls):studentNoClassLabel()}</span></td>
     <td style="font-size:.83rem">${s.parent||'<span style="color:var(--warning)">—</span>'}</td>
     <td style="font-size:.8rem">${s.parentPhone||'<span style="color:var(--warning)">—</span>'}</td>
     <td style="font-size:.78rem">${s.parentEmail||'<span style="color:var(--slate-300)">—</span>'}</td>
     <td><span class="badge ${st.excusedAbsence>5?'bg-r':st.excusedAbsence>2?'bg-o':'bg-g'}">${st.excusedAbsence}</span></td>
     <td><span class="badge ${st.unexcusedAbsence>5?'bg-r':st.unexcusedAbsence>2?'bg-o':'bg-g'}">${st.unexcusedAbsence}</span></td>
     <td>${hasPermission('students_edit')?`<button class="btn btn-out btn-xs" onclick="editStu('${s.id}')">✏️</button>`:''} ${hasPermission('students_delete')?`<button class="btn btn-r btn-xs" onclick="delStu('${s.id}')">🗑️</button>`:''}</td></tr>`;
-  }).join('')||`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--slate-400)">${t('noData')}</td></tr>`;
+  }).join('')||`<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--slate-400)">${t('noData')}</td></tr>`;
 }
 
 // ════════════════════════════════════════════
@@ -3806,11 +3874,28 @@ function saveStu(){
   const id=document.getElementById('eStuId').value;
   if(!id&&!hasPermission('students_add')){toast(LANG==='ar'?'يمكن للمشرف تعديل بيانات الطلاب الحاليين فقط':'Supervisors can edit existing student information only');return;}
   const name=document.getElementById('eStuName').value.trim();
-  const cls=document.getElementById('eStuCls').value;
-  if(!name||!cls){toast(t('nameRequired'));return;}
-  const data={id:id||('s'+rnd()),name,
+  const placement=document.getElementById('eStuCls').value;
+  const requestedProgram=document.getElementById('eStuProgram').value;
+  if(!name){toast(t('nameRequired'));return;}
+  if(!placement||placement==='__select__'){toast(LANG==='ar'?'اختر الفصل أو حالة «بدون فصل»':'Select a class or the “No class” status');return;}
+  if(!allowedPrograms().includes(requestedProgram)){toast(LANG==='ar'?'البرنامج خارج صلاحيات المستخدم':'Program is outside the signed-in user permissions');return;}
+  const cls=placement==='__no_class__'?'':placement;
+  const selectedClass=cls?db.classes[cls]:null;
+  if(cls&&(!selectedClass||normalizeClassScope(selectedClass).program!==requestedProgram||!allowedGrades(requestedProgram).includes(classGrade(selectedClass)))){toast(LANG==='ar'?'الفصل خارج صلاحيات البرنامج المحدد':'Class is outside the selected program permissions');return;}
+  const previous=id?db.students[id]:null;
+  const classHistory=studentClassHistory(previous);
+  // Change only the current roster placement. Attendance rows remain keyed by
+  // their original student and class, so prior records stay reportable.
+  if(previous?.classId&&previous.classId!==cls)classHistory.push(previous.classId);
+  const nextHistory=[...new Set(classHistory)].filter(classId=>classId!==cls);
+  const data={...(previous||{}),id:id||('s'+rnd()),name,
     schoolId:document.getElementById('eStuSid').value.trim(),
     classId:cls,
+    program:selectedClass?.program||requestedProgram,
+    gradeLevel:selectedClass?classGrade(selectedClass):(studentCurrentGrade(previous)||''),
+    enrollmentStatus:cls?'active':'left_school',
+    leftSchoolAt:cls?null:(previous?.leftSchoolAt||today()),
+    classHistory:nextHistory,
     parent:document.getElementById('eStuPar').value.trim(),
     parentPhone:document.getElementById('eStuPhone').value.trim(),
     parentEmail:document.getElementById('eStuEmail').value.trim()
@@ -3824,10 +3909,11 @@ function editStu(id){
   ['eStuId','eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach((fid,i)=>{
     document.getElementById(fid).value=[s.id,s.name,s.schoolId||'',s.parent||'',s.parentPhone||'',s.parentEmail||''][i];
   });
-  document.getElementById('eStuCls').value=s.classId;
+  document.getElementById('eStuProgram').value=studentCurrentProgram(s);
+  syncStudentClassOptions(s.classId||'__no_class__');
   openM('mStu',true);
 }
-function delStu(id){if(!hasPermission('students_delete')||!visibleStudents().some(s=>s.id===id))return;if(!confirm(t('confirmDel')))return;delete db.students[id];save();renderStuTable();renderDashboard();toast(t('deleted'));}
+function delStu(id){if(!hasPermission('students_delete')||!manageableStudents().some(s=>s.id===id))return;if(!confirm(t('confirmDel')))return;delete db.students[id];save();renderStuTable();renderDashboard();toast(t('deleted'));}
 
 // CRUD CLASSES
 function syncClassResponsibleTeachers(selectedTeacher=''){
@@ -4001,7 +4087,7 @@ function swTab(name,btn){
 }
 
 function rptRow(s,dates,cls,month){
-  const st=getStuStats(s.id,null,null,month||null,null);
+  const st=window.__attendanceReportContext&&typeof currentReportStudentStats==='function'?currentReportStudentStats(s.id,cls||''):getStuStats(s.id,null,null,month||null,null);
   const pct=reportRate(st);
   const bc=pct===null?'':pct>=90?'hi':pct>=70?'mi':'lo';
   const bdg=pct===null?`<span class="badge bg-gr">${LANG==='ar'?'لا توجد بيانات':'No data'}</span>`:st.absent===0&&st.tardy===0&&st.early===0?`<span class="badge bg-g">${t('regular')}</span>`:st.absent<=2?`<span class="badge bg-o">${t('warning')}</span>`:`<span class="badge bg-r">${t('critical')}</span>`;
@@ -4015,7 +4101,7 @@ function renderClsRpt(){
   const classes=cls?[db.classes[cls]].filter(Boolean):visibleClasses();
   let html='';
   classes.forEach(c=>{
-    const ss=visibleStudents().filter(s=>s.classId===c.id);
+    const ss=reportableStudents().filter(s=>studentHasClass(s,c.id));
     if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:14px 0 8px;font-size:.9rem">${className(c)}</div>
     <table style="margin-bottom:16px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حاضر بالكامل':'Present'}</th><th>${attendanceCountLabel()}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${LANG==='ar'?'مبكر':'Early'}</th><th>%</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${ss.map(s=>rptRow(s,[],c.id,month)).join('')}</tbody></table>`;
@@ -4029,8 +4115,10 @@ function fillRptStuList(){
   const sel=document.getElementById('rStuS');
   const previous=sel.value;
   sel.innerHTML=`<option value="">${LANG==='ar'?'اختر الطالب':'Select Student'}</option>`;
-  if(!cls)return;
-  visibleStudents().filter(s=>s.classId===cls).forEach(s=>sel.innerHTML+=`<option value="${s.id}">${s.name}</option>`);
+  reportableStudents().filter(student=>!cls||studentHasClass(student,cls)).sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en')).forEach(student=>{
+    const suffix=student.classId?'':` · ${studentNoClassLabel()}`;
+    sel.innerHTML+=`<option value="${student.id}">${student.name}${suffix}</option>`;
+  });
   if([...sel.options].some(option=>option.value===previous))sel.value=previous;
 }
 
@@ -4042,7 +4130,8 @@ async function openStudentReportCard(type){
   const year=db.academicYears?.[period.academicYear]||{classes:{},students:{}};
   const studentId=document.getElementById('rStuS').value,student=year.students?.[studentId];
   if(!student)return;
-  const classIds=attendanceClassIdsForPeriod(period.academicYear).filter(id=>id===student.classId);
+  const selectedClassId=document.getElementById('rStuCls')?.value||'';
+  const classIds=selectedClassId?attendanceClassIdsForPeriod(period.academicYear).filter(id=>id===selectedClassId):studentReportClassIds(student,period.academicYear);
   const filters={classIds,studentId};
   const statusFilters={present:['present'],attended:['present','tardy','early'],excused:['absent'],unexcused:['absent'],tardy:['tardy'],early:['early']};
   if(statusFilters[type])filters.statuses=statusFilters[type];
@@ -4076,14 +4165,16 @@ function renderStuRpt(){
   const month=document.getElementById('rStuMon').value;
   const out=document.getElementById('stuRptOut');
   if(!sid){out.innerHTML=`<div style="text-align:center;padding:20px;color:var(--slate-400)">${LANG==='ar'?'اختر طالباً':'Select a student'}</div>`;return;}
-  const stu=db.students[sid]; const cls=stu?db.classes[stu.classId]:null;
+  const stu=db.students[sid];
   const st=getStuStats(sid,null,null,month||null,null);
   const tot=st.recordedDays; const pct=reportRate(st);
+  const previousClasses=stu?studentReportClassIds(stu).filter(id=>id!==stu.classId).map(id=>db.classes[id]?className(db.classes[id]):id):[];
   const excusedList=st.excusedAbsenceDates.map(d=>`<span class="badge bg-o" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
   const unexcusedList=st.unexcusedAbsenceDates.map(d=>`<span class="badge bg-r" style="margin:2px">${d}</span>`).join('')||`<span style="color:var(--slate-400)">—</span>`;
   out.innerHTML=`<div style="background:var(--slate-50);border-radius:var(--radius);padding:16px;margin-bottom:14px;border:1px solid var(--slate-200)">
     <div style="font-size:1rem;font-weight:800;color:var(--slate-800)">${stu?stu.name:'—'}</div>
-    <div style="font-size:.78rem;color:var(--slate-400);margin-top:3px">${cls?className(cls):'—'} | ${stu&&stu.parent?stu.parent:'—'} | ${stu&&stu.parentPhone?stu.parentPhone:'—'}</div>
+    <div style="font-size:.78rem;color:var(--slate-400);margin-top:3px">${stu?studentPlacementLabel(stu):'—'} | ${stu&&stu.parent?stu.parent:'—'} | ${stu&&stu.parentPhone?stu.parentPhone:'—'}</div>
+    ${previousClasses.length?`<div style="font-size:.74rem;color:var(--slate-400);margin-top:4px">${LANG==='ar'?'الفصول السابقة':'Previous classes'}: ${previousClasses.join(' · ')}</div>`:''}
   </div>
   <div class="sg" style="grid-template-columns:repeat(8,1fr);margin-bottom:14px">
     ${dashboardCard('days','b','📅',tot,LANG==='ar'?'أيام':'Days','openStudentReportCard','padding:12px')}
@@ -4126,10 +4217,10 @@ function renderPerRpt(){
   const classes=cls?[db.classes[cls]].filter(Boolean):visibleClasses();
   let html=`<div style="font-weight:700;color:var(--brand);margin-bottom:12px">${LANG==='ar'?'من':'From'} ${from} ${LANG==='ar'?'إلى':'to'} ${to}</div>`;
   classes.forEach(c=>{
-    const ss=visibleStudents().filter(s=>s.classId===c.id); if(!ss.length)return;
+    const ss=reportableStudents().filter(s=>studentHasClass(s,c.id)); if(!ss.length)return;
     html+=`<div style="font-weight:700;color:var(--brand);margin:12px 0 6px">${className(c)}</div>
     <table style="margin-bottom:14px"><thead><tr><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'حاضر بالكامل':'Present'}</th><th>${attendanceCountLabel()}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>%</th></tr></thead>
-    <tbody>${ss.map(s=>{const st=getStuStats(s.id,from,to);const pct=reportRate(st);return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-g">${st.attended}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct===null?'—':`${pct}%`}</td></tr>`;}).join('')}</tbody></table>`;
+    <tbody>${ss.map(s=>{const st=window.__attendanceReportContext&&typeof currentReportStudentStats==='function'?currentReportStudentStats(s.id,c.id):getStuStats(s.id,from,to);const pct=reportRate(st);return`<tr><td style="font-weight:600">${s.name}</td><td><span class="badge bg-g">${st.present}</span></td><td><span class="badge bg-g">${st.attended}</span></td><td><span class="badge bg-o">${st.excusedAbsence}</span></td><td><span class="badge bg-r">${st.unexcusedAbsence}</span></td><td><span class="badge bg-b">${st.tardy}</span></td><td><span class="badge bg-o">${st.early}</span></td><td style="font-weight:600">${pct===null?'—':`${pct}%`}</td></tr>`;}).join('')}</tbody></table>`;
   });
   document.getElementById('perRptOut').innerHTML=html;
 }
@@ -4137,7 +4228,7 @@ function renderPerRpt(){
 function renderTopRpt(){
   if(window.withAttendanceReportContext&&!window.__attendanceReportContext)return window.withAttendanceReportContext(renderTopRpt);
   const month=document.getElementById('rTopMon').value;
-  const top=visibleStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,null);const cls=db.classes[s.classId];return{...s,attended:st.attended,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence,tardy:st.tardy,early:st.early,clsName:cls?className(cls):s.classId};}).filter(s=>s.absent>0||s.tardy>0||s.early>0).sort((a,b)=>b.absent-a.absent||b.tardy-a.tardy||b.early-a.early);
+  const top=reportableStudents().map(s=>{const st=getStuStats(s.id,null,null,month||null,null);return{...s,attended:st.attended,absent:st.absent,excusedAbsence:st.excusedAbsence,unexcusedAbsence:st.unexcusedAbsence,tardy:st.tardy,early:st.early,clsName:studentPlacementLabel(s)};}).filter(s=>s.absent>0||s.tardy>0||s.early>0).sort((a,b)=>b.absent-a.absent||b.tardy-a.tardy||b.early-a.early);
   document.getElementById('topRptOut').innerHTML=top.length?`<table><thead><tr><th>#</th><th>${LANG==='ar'?'الطالب':'Student'}</th><th>${LANG==='ar'?'الفصل':'Class'}</th><th>${attendanceCountLabel()}</th><th>${t('excusedAbsence')}</th><th>${t('unexcusedAbsence')}</th><th>${t('tardy')}</th><th>${t('earlyLeave')}</th><th>${LANG==='ar'?'التقييم':'Rating'}</th></tr></thead><tbody>${top.map((s,i)=>`<tr><td style="color:var(--slate-400)">${i+1}</td><td style="font-weight:600">${s.name}</td><td><span class="badge bg-b">${s.clsName}</span></td><td><span class="badge bg-g">${s.attended}</span></td><td><span class="badge bg-r">${s.excusedAbsence}</span></td><td><span class="badge bg-r">${s.unexcusedAbsence}</span></td><td><span class="badge bg-b">${s.tardy}</span></td><td><span class="badge bg-o">${s.early}</span></td><td><span class="badge ${s.absent>=5?'bg-r':s.absent>=3?'bg-o':'bg-gr'}">${s.absent>=5?t('critical'):s.absent>=3?t('warning'):'ℹ️'}</span></td></tr>`).join('')}</tbody></table>`:`<div style="text-align:center;padding:30px;color:var(--success)">${t('noAbsent')} 🎉</div>`;
 }
 
@@ -4683,7 +4774,9 @@ function doImport(){
   impPlan.rows.forEach(row=>{
     const existing=impPlan.existingBySchoolId.get(row.schoolId.toLowerCase());
     const id=existing?.id||('s'+rnd());
-    db.students[id]={id,name:row.studentName,schoolId:row.schoolId,classId:row.classCode,parent:row.guardianName,parentPhone:row.guardianMobile,parentEmail:row.guardianEmail};
+    const classHistory=studentClassHistory(existing);
+    if(existing?.classId&&existing.classId!==row.classCode)classHistory.push(existing.classId);
+    db.students[id]={...(existing||{}),id,name:row.studentName,schoolId:row.schoolId,classId:row.classCode,program:row.program,gradeLevel:row.grade,enrollmentStatus:'active',leftSchoolAt:null,classHistory:[...new Set(classHistory)].filter(classId=>classId!==row.classCode),parent:row.guardianName,parentPhone:row.guardianMobile,parentEmail:row.guardianEmail};
   });
   const classCount=impPlan.classesToCreate.length;
   const studentCount=impPlan.studentsToCreate.length;
@@ -4729,7 +4822,7 @@ async function openM(id,preserve=false){
   }
   document.getElementById(id).classList.add('open');
   if(preserve)return;
-  if(id==='mStu'){document.getElementById('eStuId').value='';['eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach(f=>document.getElementById(f).value='');document.getElementById('eStuCls').value='';}
+  if(id==='mStu'){document.getElementById('eStuId').value='';['eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach(f=>document.getElementById(f).value='');document.getElementById('eStuProgram').value=db.activeProgram;syncStudentClassOptions('__select__');}
   if(id==='mCls'){['eClsOld','eClsId','eClsNameAr','eClsNameEn'].forEach(f=>document.getElementById(f).value='');syncClassScopeOptions(db.activeProgram);}
   if(id==='mTch'){['eTchId','eTchName','eTchEmail','eTchSubj'].forEach(f=>document.getElementById(f).value='');setUserPasswordFields(true);document.getElementById('eTchRole').value='teacher';document.querySelectorAll('.tch-program,.tch-program-grade').forEach(el=>el.checked=true);syncUserSectionPermissionsFromRole();}
   if(id==='mPassword'){['newPassword','confirmNewPassword'].forEach(f=>document.getElementById(f).value='');document.getElementById('revokeOtherSessions').checked=true;}

@@ -38,7 +38,9 @@ function reportAttendanceQuery(period,semester){
   }else if(id==='rStu'){
     const studentId=document.getElementById('rStuS')?.value||'';const classId=document.getElementById('rStuCls')?.value||'';
     if(!studentId)return{...query,classIds:[],skip:true};
-    if(classId)query.classIds=classIds.filter(id=>id===classId);query.studentId=studentId;query.includeAbsenceDates=true;
+    const student=db.academicYears?.[period.academicYear]?.students?.[studentId];
+    query.classIds=classId?classIds.filter(id=>id===classId):(student&&window.studentReportClassIds?window.studentReportClassIds(student,period.academicYear):classIds);
+    query.studentId=studentId;query.includeAbsenceDates=true;
     Object.assign(query,reportMonthRange(period.academicYear,semester,document.getElementById('rStuMon')?.value||''));
   }else if(id==='rDay'){
     const date=document.getElementById('rDayD')?.value||'';if(!date)return{...query,classIds:[],skip:true};query.date=date;
@@ -145,7 +147,7 @@ window.refreshAttendanceReportFilters=async function(options={}){
     const label=cls=>`${className(cls)} · ${programLabel(cls.program)} · ${LANG==='ar'?'صف':'Grade'} ${classGrade(cls)}`;
     [['rClsS',true],['rPerCls',true],['rStuCls',false]].forEach(([id,all])=>{
       const element=document.getElementById(id);if(!element)return;const previous=element.value;
-      element.innerHTML=`<option value="">${all?(LANG==='ar'?'كل الفصول':'All Classes'):(LANG==='ar'?'اختر الفصل':'Select Class')}</option>`+classes.map(cls=>`<option value="${escapeReportHtml(cls.id)}">${escapeReportHtml(label(cls))}</option>`).join('');
+      element.innerHTML=`<option value="">${all?(LANG==='ar'?'كل الفصول':'All Classes'):(LANG==='ar'?'كل الفصول / بدون فصل':'All classes / No class')}</option>`+classes.map(cls=>`<option value="${escapeReportHtml(cls.id)}">${escapeReportHtml(label(cls))}</option>`).join('');
       if(classes.some(cls=>cls.id===previous))element.value=previous;
     });
     fillRptStuList();
@@ -222,15 +224,13 @@ function reportStudentHeader(includeRating=false){
 }
 
 function appendStudentStats(rows,classes,from,to,month,year,includeRating=false){
-  const students=visibleStudents();
+  const students=reportableStudents();
   classes.forEach(cls=>{
-    const classStudents=students.filter(student=>student.classId===cls.id);
+    const classStudents=students.filter(student=>studentHasClass(student,cls.id));
     if(!classStudents.length)return;
     rows.push([className(cls)]);rows.push(reportStudentHeader(includeRating));
     classStudents.forEach(student=>{
-      const reportId=document.querySelector('#page-reports .tp.active')?.id||'';
-      const allClasses=(reportId==='rCls'&&!document.getElementById('rClsS')?.value)||(reportId==='rPer'&&!document.getElementById('rPerCls')?.value);
-      const stats=currentReportStudentStats(student.id,allClasses?'':cls.id);
+      const stats=currentReportStudentStats(student.id,cls.id);
       const row=[student.name,student.schoolId||'',stats.present,stats.attended,stats.excusedAbsence,stats.unexcusedAbsence,stats.tardy,stats.early,reportRateText(stats)];
       if(includeRating)row.push(reportRating(stats));
       rows.push(row);
@@ -253,12 +253,15 @@ function classReportRows(){
 function studentReportRows(){
   const student=db.students[document.getElementById('rStuS').value];if(!student)return[];
   const month=document.getElementById('rStuMon').value;
-  const cls=db.classes[student.classId];const stats=currentReportStudentStats(student.id,student.classId);
+  const selectedClassId=document.getElementById('rStuCls')?.value||'';
+  const stats=currentReportStudentStats(student.id,selectedClassId);
+  const previousClasses=studentReportClassIds(student).filter(id=>id!==student.classId).map(id=>db.classes[id]?className(db.classes[id]):id);
   const rows=reportContextRows([[LANG==='ar'?'الفترة':'Period',reportMonthLabel(month)]]);
   rows.push(
     [LANG==='ar'?'الطالب':'Student',student.name],
     [LANG==='ar'?'الرقم المدرسي':'School ID',student.schoolId||''],
-    [LANG==='ar'?'الفصل':'Class',cls?className(cls):student.classId],
+    [LANG==='ar'?'الفصل / الحالة الحالية':'Current Class / Status',studentPlacementLabel(student)],
+    [LANG==='ar'?'الفصول السابقة':'Previous Classes',previousClasses.join(' · ')||'—'],
     [LANG==='ar'?'ولي الأمر':'Guardian',student.parent||''],
     [LANG==='ar'?'هاتف ولي الأمر':'Guardian Phone',student.parentPhone||''],
     [LANG==='ar'?'بريد ولي الأمر':'Guardian Email',student.parentEmail||''],[],
@@ -297,11 +300,11 @@ function topAbsentReportRows(){
   const month=document.getElementById('rTopMon').value;
   const rows=reportContextRows([[LANG==='ar'?'الفترة':'Period',reportMonthLabel(month)]]);
   rows.push(['#',LANG==='ar'?'الطالب':'Student',LANG==='ar'?'الرقم المدرسي':'School ID',LANG==='ar'?'الفصل':'Class',attendanceCountLabel(),t('excusedAbsence'),t('unexcusedAbsence'),t('tardy'),t('earlyLeave'),LANG==='ar'?'التقييم':'Rating']);
-  visibleStudents()
-    .map(student=>({student,stats:currentReportStudentStats(student.id),cls:db.classes[student.classId]}))
+  reportableStudents()
+    .map(student=>({student,stats:currentReportStudentStats(student.id)}))
     .filter(item=>item.stats.absent>0||item.stats.tardy>0||item.stats.early>0)
     .sort((a,b)=>b.stats.absent-a.stats.absent||b.stats.tardy-a.stats.tardy||b.stats.early-a.stats.early)
-    .forEach((item,index)=>rows.push([index+1,item.student.name,item.student.schoolId||'',item.cls?className(item.cls):item.student.classId,item.stats.attended,item.stats.excusedAbsence,item.stats.unexcusedAbsence,item.stats.tardy,item.stats.early,reportRating(item.stats)]));
+    .forEach((item,index)=>rows.push([index+1,item.student.name,item.student.schoolId||'',studentPlacementLabel(item.student),item.stats.attended,item.stats.excusedAbsence,item.stats.unexcusedAbsence,item.stats.tardy,item.stats.early,reportRating(item.stats)]));
   return rows;
 }
 
