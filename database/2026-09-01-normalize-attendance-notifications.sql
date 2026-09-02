@@ -1,5 +1,9 @@
 BEGIN;
 
+-- Freeze legacy JSON saves for this short transaction so a concurrent browser
+-- cannot write attendance after the copy step but before the cleanup trigger.
+LOCK TABLE public.school_state IN SHARE ROW EXCLUSIVE MODE;
+
 -- Notification delivery state belongs to the attendance row. Keeping it in
 -- school_state duplicated the largest part of the application state and made
 -- every attendance edit transfer and replace the entire JSON document.
