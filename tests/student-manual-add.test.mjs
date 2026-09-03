@@ -17,21 +17,24 @@ const functionSource=(name)=>{
   throw new Error(`${name} is incomplete in index.html`);
 };
 
-async function runManualAdd({activeProgram='national',requestedProgram='international',placement='international-4-a',flushError=null,changeProgramError=null}={}){
+async function runManualAdd({activeProgram='national',requestedProgram='international',placement='international-4-a',existingStudent=null,flushError=null,changeProgramError=null}={}){
   const fields={
-    eStuId:{value:''},eStuName:{value:'Manual Test Student'},eStuCls:{value:placement},
+    eStuId:{value:existingStudent?.id||''},eStuName:{value:'Manual Test Student'},eStuCls:{value:placement},
     eStuProgram:{value:requestedProgram},eStuSid:{value:'TEST-001'},eStuPar:{value:''},
     eStuPhone:{value:''},eStuEmail:{value:''}
   };
   const calls={save:0,flush:0,changeProgram:0,refresh:0,close:0,toast:[]};
-  const db={activeProgram,students:{},classes:{
+  const db={activeProgram,students:existingStudent?{[existingStudent.id]:existingStudent}:{},classes:{
     'international-4-a':{id:'international-4-a',program:'international',gradeLevel:'4'}
   }};
   const context={
     db,LANG:'en',document:{getElementById:id=>fields[id]},
     hasPermission:()=>true,allowedPrograms:()=>['national','international'],allowedGrades:()=>['4'],
-    normalizeClassScope:value=>value,classGrade:value=>value.gradeLevel,studentClassHistory:()=>[],
-    studentCurrentGrade:()=>'',today:()=> '2026-09-02',rnd:()=> 'manual-test',
+    normalizeClassScope:value=>value,classGrade:value=>value.gradeLevel,
+    studentClassHistory:student=>[...(student?.classHistory||[])],
+    studentCurrentGrade:student=>student?.gradeLevel||'',
+    studentEnrollmentStatus:student=>student?.classId?'active':(['withdrawn','left_school'].includes(student?.enrollmentStatus)?'withdrawn':'no_class'),
+    today:()=> '2026-09-02',rnd:()=> 'manual-test',
     save:()=>{calls.save+=1;},
     flushStateSave:async options=>{
       calls.flush+=1;assert.equal(options?.throwOnError,true);
@@ -69,6 +72,17 @@ assert.deepEqual(crossProgram.calls.toast,['Saved']);
 const noClass=await runManualAdd({requestedProgram:'international',placement:'__no_class__'});
 assert.equal(noClass.db.students['smanual-test'].program,'international','a student without a class must retain the selected program');
 assert.equal(noClass.db.students['smanual-test'].classId,'');
+assert.equal(noClass.db.students['smanual-test'].enrollmentStatus,'no_class');
+assert.equal(noClass.db.students['smanual-test'].withdrawnAt,null);
+
+const previouslyActive={id:'s-existing',name:'Existing Student',classId:'international-4-a',program:'international',gradeLevel:'4',enrollmentStatus:'active',classHistory:['international-3-a']};
+const withdrawn=await runManualAdd({activeProgram:'international',requestedProgram:'international',placement:'__withdrawn__',existingStudent:previouslyActive});
+const withdrawnStudent=withdrawn.db.students['s-existing'];
+assert.equal(withdrawnStudent.classId,'');
+assert.equal(withdrawnStudent.enrollmentStatus,'withdrawn');
+assert.equal(withdrawnStudent.withdrawnAt,'2026-09-02');
+assert.equal(withdrawnStudent.leftSchoolAt,'2026-09-02');
+assert.deepEqual(JSON.parse(JSON.stringify(withdrawnStudent.classHistory)),['international-3-a','international-4-a'],'withdrawing must preserve all previous class placements');
 
 const sameProgram=await runManualAdd({activeProgram:'international'});
 assert.equal(sameProgram.calls.changeProgram,0);
@@ -92,9 +106,10 @@ const editFields={
 };
 const editCalls=[];
 const editContext={
-  db:{students:{s1:{id:'s1',name:'Existing Student',schoolId:'1001',classId:'',program:'international'}}},
+  db:{students:{s1:{id:'s1',name:'Existing Student',schoolId:'1001',classId:'',program:'international',enrollmentStatus:'no_class'}}},
   document:{getElementById:id=>editFields[id]},
   studentCurrentProgram:student=>student.program,
+  studentEnrollmentStatus:student=>student.enrollmentStatus,
   syncStudentClassOptions:(selectedClass,selectedProgram)=>editCalls.push({selectedClass,selectedProgram}),
   openM:(id,preserve)=>editCalls.push({id,preserve})
 };
@@ -102,5 +117,16 @@ vm.runInNewContext(functionSource('editStu'),editContext);
 editContext.editStu('s1');
 assert.deepEqual(editCalls[0],{selectedClass:'__no_class__',selectedProgram:'international'},'editing must restore the saved student program explicitly');
 assert.deepEqual(editCalls[1],{id:'mStu',preserve:true});
+
+editCalls.length=0;
+editContext.db.students.s1.enrollmentStatus='withdrawn';
+editContext.editStu('s1');
+assert.deepEqual(editCalls[0],{selectedClass:'__withdrawn__',selectedProgram:'international'},'editing must restore the withdrawn status');
+
+const statusContext={};
+vm.runInNewContext(functionSource('studentEnrollmentStatus'),statusContext);
+assert.equal(statusContext.studentEnrollmentStatus({classId:'international-4-a',enrollmentStatus:'withdrawn'}),'active');
+assert.equal(statusContext.studentEnrollmentStatus({classId:'',enrollmentStatus:'left_school'}),'withdrawn','legacy left-school records must remain withdrawn');
+assert.equal(statusContext.studentEnrollmentStatus({classId:'',enrollmentStatus:'no_class'}),'no_class');
 
 console.log('Manual student roster regression checks passed.');

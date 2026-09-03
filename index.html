@@ -1042,7 +1042,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
       <div class="ff"><label data-ar="جوال ولي الأمر" data-en="Guardian Mobile">جوال ولي الأمر</label><input type="tel" id="eStuPhone" placeholder="05xxxxxxxx"></div>
       <div class="ff"><label data-ar="بريد ولي الأمر" data-en="Guardian Email">بريد ولي الأمر</label><input type="email" id="eStuEmail" placeholder="parent@email.com"></div>
     </div>
-    <div class="alert alert-i" style="display:block;margin:12px 0 0" data-ar="عند اختيار «بدون فصل / غادر المدرسة»، يُستبعد الطالب من الحضور اليومي مع الاحتفاظ بجميع سجلاته وتقاريره السابقة." data-en="Selecting “No class / Left school” removes the student from daily attendance while preserving all previous records and reports.">عند اختيار «بدون فصل / غادر المدرسة»، يُستبعد الطالب من الحضور اليومي مع الاحتفاظ بجميع سجلاته وتقاريره السابقة.</div>
+    <div class="alert alert-i" style="display:block;margin:12px 0 0" data-ar="عند اختيار «بدون فصل» أو «منسحب»، يُستبعد الطالب من الحضور اليومي مع الاحتفاظ بجميع سجلات الحضور والسلوك والتقارير السابقة." data-en="Selecting “No Class” or “Withdrawn” removes the student from daily attendance while preserving all previous attendance, behavior, and report history.">عند اختيار «بدون فصل» أو «منسحب»، يُستبعد الطالب من الحضور اليومي مع الاحتفاظ بجميع سجلات الحضور والسلوك والتقارير السابقة.</div>
     <div class="ma">
       <button class="btn btn-p" onclick="saveStu()">💾 <span data-ar="حفظ" data-en="Save">حفظ</span></button>
       <button class="btn btn-gr" onclick="closeM('mStu')"><span data-ar="إلغاء" data-en="Cancel">إلغاء</span></button>
@@ -1454,7 +1454,13 @@ function visibleClasses(){
 }
 function visibleStudents(){const ids=new Set(visibleClasses().map(c=>c.id));return Object.values(db.students||{}).filter(s=>ids.has(s.classId));}
 function programLabel(program){return LANG==='ar'?(program==='international'?'الدولي':'الأهلي'):(program==='international'?'International':'National');}
-function studentNoClassLabel(){return LANG==='ar'?'بدون فصل / غادر المدرسة':'No class / Left school';}
+function studentNoClassLabel(){return LANG==='ar'?'بدون فصل':'No Class';}
+function studentWithdrawnLabel(){return LANG==='ar'?'منسحب':'Withdrawn';}
+function studentEnrollmentStatus(student){
+  if(student?.classId)return'active';
+  return student?.enrollmentStatus==='withdrawn'||student?.enrollmentStatus==='left_school'?'withdrawn':'no_class';
+}
+function studentEnrollmentLabel(student){return studentEnrollmentStatus(student)==='withdrawn'?studentWithdrawnLabel():studentNoClassLabel();}
 function studentClassHistory(student){
   return[...new Set((Array.isArray(student?.classHistory)?student.classHistory:[]).map(item=>typeof item==='string'?item:item?.classId).filter(Boolean).map(String))];
 }
@@ -1492,7 +1498,7 @@ function reportableStudents(){
 function studentPlacementLabel(student){
   const cls=db.classes?.[student?.classId];
   if(studentCurrentProgram(student)!==db.activeProgram)return LANG==='ar'?'انتقل إلى برنامج آخر':'Moved to another program';
-  return cls?className(cls):studentNoClassLabel();
+  return cls?className(cls):studentEnrollmentLabel(student);
 }
 window.studentReportClassIds=studentReportClassIds;
 function sectionLabel(section){
@@ -3058,8 +3064,8 @@ function syncStudentClassOptions(selectedClass=null,selectedProgram=''){
   const previous=selectedClass===null?classSelect.value:selectedClass;
   const classes=Object.values(db.classes||{}).map(normalizeClassScope).filter(cls=>cls.program===program&&allowedGrades(program).includes(classGrade(cls))).sort((a,b)=>className(a).localeCompare(className(b),LANG==='ar'?'ar':'en'));
   const label=cls=>`${className(cls)} · ${programLabel(cls.program)} · ${LANG==='ar'?'صف':'Grade'} ${classGrade(cls)}`;
-  classSelect.innerHTML=`<option value="__select__">${LANG==='ar'?'— اختر الفصل أو الحالة —':'— Select class or status —'}</option>`+classes.map(cls=>`<option value="${cls.id}">${label(cls)}</option>`).join('')+`<option value="__no_class__">${studentNoClassLabel()}</option>`;
-  classSelect.value=previous==='__no_class__'||classes.some(cls=>cls.id===previous)?previous:'__select__';
+  classSelect.innerHTML=`<option value="__select__">${LANG==='ar'?'— اختر الفصل أو الحالة —':'— Select class or status —'}</option>`+classes.map(cls=>`<option value="${cls.id}">${label(cls)}</option>`).join('')+`<option value="__no_class__">${studentNoClassLabel()}</option><option value="__withdrawn__">${studentWithdrawnLabel()}</option>`;
+  classSelect.value=['__no_class__','__withdrawn__'].includes(previous)||classes.some(cls=>cls.id===previous)?previous:'__select__';
 }
 function fillSelects(){
   const cls=visibleClasses();
@@ -3070,8 +3076,8 @@ function fillSelects(){
   const tchOpt = ()=>`<option value="">—</option>`+tch.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
   ['attClass'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsReq(); });
   const reportStudentClass=document.getElementById('rStuCls');
-  if(reportStudentClass)reportStudentClass.innerHTML=`<option value="">${LANG==='ar'?'كل الفصول / بدون فصل':'All classes / No class'}</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
-  ['stuClsF','rClsS','rPerCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsOpt()+(id==='stuClsF'?`<option value="__no_class__">${studentNoClassLabel()}</option>`:''); });
+  if(reportStudentClass)reportStudentClass.innerHTML=`<option value="">${LANG==='ar'?'كل الفصول / الحالات':'All classes / statuses'}</option>`+cls.map(c=>`<option value="${c.id}">${classOptionLabel(c)}</option>`).join('');
+  ['stuClsF','rClsS','rPerCls'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=clsOpt()+(id==='stuClsF'?`<option value="__no_class__">${studentNoClassLabel()}</option><option value="__withdrawn__">${studentWithdrawnLabel()}</option>`:''); });
   syncStudentClassOptions();
   ['eClsTch'].forEach(id=>{ const el=document.getElementById(id);if(el)el.innerHTML=tchOpt(); });
   ['rMonS','rStuMon','rTopMon'].forEach(id=>{ const el=document.getElementById(id);if(el){const m=LANG==='ar'?MONTHS_AR:MONTHS_EN;el.innerHTML=`<option value="">${LANG==='ar'?'كل الأشهر':'All Months'}</option>`+m.map((mn,i)=>`<option value="${i+1}">${mn}</option>`).join('');} });
@@ -3861,8 +3867,10 @@ function renderStuTable(){
   const srch=document.getElementById('stuSrch').value.toLowerCase();
   const cf=document.getElementById('stuClsF').value;
   const stus=manageableStudents().filter(s=>{
-    if(cf==='__no_class__'&&s.classId)return false;
-    if(cf&&cf!=='__no_class__'&&s.classId!==cf)return false;
+    const enrollmentStatus=studentEnrollmentStatus(s);
+    if(cf==='__no_class__'&&enrollmentStatus!=='no_class')return false;
+    if(cf==='__withdrawn__'&&enrollmentStatus!=='withdrawn')return false;
+    if(cf&&!['__no_class__','__withdrawn__'].includes(cf)&&s.classId!==cf)return false;
     if(srch&&!s.name.toLowerCase().includes(srch)&&!(s.schoolId||'').toLowerCase().includes(srch))return false;
     return true;
   }).sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en'));
@@ -3873,7 +3881,7 @@ function renderStuTable(){
     <td style="font-weight:600">${s.name}</td>
     <td style="font-size:.79rem;color:var(--slate-400)">${s.schoolId||'—'}</td>
     <td><span class="badge ${program==='international'?'bg-p':'bg-b'}">${programLabel(program)}</span></td>
-    <td><span class="badge ${cls?'bg-b':'bg-gr'}" ${priorClasses?`title="${LANG==='ar'?'الفصول السابقة':'Previous classes'}: ${escapeImportHtml(priorClasses)}"`:''}>${cls?className(cls):studentNoClassLabel()}</span></td>
+    <td><span class="badge ${cls?'bg-b':studentEnrollmentStatus(s)==='withdrawn'?'bg-r':'bg-gr'}" ${priorClasses?`title="${LANG==='ar'?'الفصول السابقة':'Previous classes'}: ${escapeImportHtml(priorClasses)}"`:''}>${cls?className(cls):studentEnrollmentLabel(s)}</span></td>
     <td style="font-size:.83rem">${s.parent||'<span style="color:var(--warning)">—</span>'}</td>
     <td style="font-size:.8rem">${s.parentPhone||'<span style="color:var(--warning)">—</span>'}</td>
     <td style="font-size:.78rem">${s.parentEmail||'<span style="color:var(--slate-300)">—</span>'}</td>
@@ -3894,9 +3902,9 @@ async function saveStu(){
   const placement=document.getElementById('eStuCls').value;
   const requestedProgram=document.getElementById('eStuProgram').value;
   if(!name){toast(t('nameRequired'));return;}
-  if(!placement||placement==='__select__'){toast(LANG==='ar'?'اختر الفصل أو حالة «بدون فصل»':'Select a class or the “No class” status');return;}
+  if(!placement||placement==='__select__'){toast(LANG==='ar'?'اختر الفصل أو حالة «بدون فصل» أو «منسحب»':'Select a class, “No Class,” or “Withdrawn”');return;}
   if(!allowedPrograms().includes(requestedProgram)){toast(LANG==='ar'?'البرنامج خارج صلاحيات المستخدم':'Program is outside the signed-in user permissions');return;}
-  const cls=placement==='__no_class__'?'':placement;
+  const cls=['__no_class__','__withdrawn__'].includes(placement)?'':placement;
   const selectedClass=cls?db.classes[cls]:null;
   if(cls&&(!selectedClass||normalizeClassScope(selectedClass).program!==requestedProgram||!allowedGrades(requestedProgram).includes(classGrade(selectedClass)))){toast(LANG==='ar'?'الفصل خارج صلاحيات البرنامج المحدد':'Class is outside the selected program permissions');return;}
   const previous=id?db.students[id]:null;
@@ -3905,13 +3913,16 @@ async function saveStu(){
   // their original student and class, so prior records stay reportable.
   if(previous?.classId&&previous.classId!==cls)classHistory.push(previous.classId);
   const nextHistory=[...new Set(classHistory)].filter(classId=>classId!==cls);
+  const enrollmentStatus=cls?'active':placement==='__withdrawn__'?'withdrawn':'no_class';
+  const withdrawnAt=enrollmentStatus==='withdrawn'?(studentEnrollmentStatus(previous)==='withdrawn'?(previous?.withdrawnAt||previous?.leftSchoolAt||today()):today()):null;
   const data={...(previous||{}),id:id||('s'+rnd()),name,
     schoolId:document.getElementById('eStuSid').value.trim(),
     classId:cls,
     program:requestedProgram,
     gradeLevel:selectedClass?classGrade(selectedClass):(studentCurrentGrade(previous)||''),
-    enrollmentStatus:cls?'active':'left_school',
-    leftSchoolAt:cls?null:(previous?.leftSchoolAt||today()),
+    enrollmentStatus,
+    withdrawnAt,
+    leftSchoolAt:withdrawnAt,
     classHistory:nextHistory,
     parent:document.getElementById('eStuPar').value.trim(),
     parentPhone:document.getElementById('eStuPhone').value.trim(),
@@ -3950,7 +3961,8 @@ function editStu(id){
   ['eStuId','eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach((fid,i)=>{
     document.getElementById(fid).value=[s.id,s.name,s.schoolId||'',s.parent||'',s.parentPhone||'',s.parentEmail||''][i];
   });
-  syncStudentClassOptions(s.classId||'__no_class__',studentCurrentProgram(s));
+  const placement=s.classId||(studentEnrollmentStatus(s)==='withdrawn'?'__withdrawn__':'__no_class__');
+  syncStudentClassOptions(placement,studentCurrentProgram(s));
   openM('mStu',true);
 }
 function delStu(id){if(!hasPermission('students_delete')||!manageableStudents().some(s=>s.id===id))return;if(!confirm(t('confirmDel')))return;delete db.students[id];save();renderStuTable();renderDashboard();toast(t('deleted'));}
@@ -4156,7 +4168,7 @@ function fillRptStuList(){
   const previous=sel.value;
   sel.innerHTML=`<option value="">${LANG==='ar'?'اختر الطالب':'Select Student'}</option>`;
   reportableStudents().filter(student=>!cls||studentHasClass(student,cls)).sort((a,b)=>a.name.localeCompare(b.name,LANG==='ar'?'ar':'en')).forEach(student=>{
-    const suffix=student.classId?'':` · ${studentNoClassLabel()}`;
+    const suffix=student.classId?'':` · ${studentEnrollmentLabel(student)}`;
     sel.innerHTML+=`<option value="${student.id}">${student.name}${suffix}</option>`;
   });
   if([...sel.options].some(option=>option.value===previous))sel.value=previous;
@@ -4816,7 +4828,7 @@ function doImport(){
     const id=existing?.id||('s'+rnd());
     const classHistory=studentClassHistory(existing);
     if(existing?.classId&&existing.classId!==row.classCode)classHistory.push(existing.classId);
-    db.students[id]={...(existing||{}),id,name:row.studentName,schoolId:row.schoolId,classId:row.classCode,program:row.program,gradeLevel:row.grade,enrollmentStatus:'active',leftSchoolAt:null,classHistory:[...new Set(classHistory)].filter(classId=>classId!==row.classCode),parent:row.guardianName,parentPhone:row.guardianMobile,parentEmail:row.guardianEmail};
+    db.students[id]={...(existing||{}),id,name:row.studentName,schoolId:row.schoolId,classId:row.classCode,program:row.program,gradeLevel:row.grade,enrollmentStatus:'active',withdrawnAt:null,leftSchoolAt:null,classHistory:[...new Set(classHistory)].filter(classId=>classId!==row.classCode),parent:row.guardianName,parentPhone:row.guardianMobile,parentEmail:row.guardianEmail};
   });
   const classCount=impPlan.classesToCreate.length;
   const studentCount=impPlan.studentsToCreate.length;

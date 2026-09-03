@@ -17,7 +17,7 @@ const functionSource=name=>{
   throw new Error(`${name} is incomplete in index.html`);
 };
 
-const student={id:'s-test',name:'Persistence Test',classId:'international-4-a',program:'international'};
+const student={id:'s-test',name:'Persistence Test',classId:'',program:'international',enrollmentStatus:'withdrawn',withdrawnAt:'2026-09-03',classHistory:['international-4-a']};
 const rosterOperation={
   type:'set',path:['academicYears','2026-2027','students',student.id],value:student
 };
@@ -59,6 +59,8 @@ assert.equal(verified.calls.apply,0);
 assert.equal(verified.context.schoolStateContentHash,'confirmed-hash');
 assert.equal(verified.context.lastServerUpdatedAt,'2026-09-03T04:00:00.000Z');
 assert.equal(verified.context.lastConfirmedState.academicYears['2026-2027'].students['s-test'].program,'international');
+assert.equal(verified.context.lastConfirmedState.academicYears['2026-2027'].students['s-test'].enrollmentStatus,'withdrawn');
+assert.deepEqual(verified.context.lastConfirmedState.academicYears['2026-2027'].students['s-test'].classHistory,['international-4-a']);
 
 const missing=await runPersist({confirmedMatches:false});
 assert.equal(missing.error?.code,'SAVE_BUSY','an unconfirmed student must remain eligible for automatic retry');
