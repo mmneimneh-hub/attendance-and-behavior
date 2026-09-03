@@ -1036,7 +1036,7 @@ window.neonReady = new Promise(resolve => { window.__resolveNeon = resolve; });
     <div class="fg">
       <div class="ff"><label data-ar="اسم الطالب *" data-en="Student Name *">اسم الطالب *</label><input type="text" id="eStuName"></div>
       <div class="ff"><label data-ar="الرقم المدرسي" data-en="School ID">الرقم المدرسي</label><input type="text" id="eStuSid"></div>
-      <div class="ff"><label data-ar="البرنامج *" data-en="Program *">البرنامج *</label><select id="eStuProgram" onchange="syncStudentClassOptions()"></select></div>
+      <div class="ff"><label data-ar="برنامج الطالب *" data-en="Student Program *">برنامج الطالب *</label><select id="eStuProgram" required aria-required="true" onchange="syncStudentClassOptions()"></select></div>
       <div class="ff"><label data-ar="الفصل / الحالة *" data-en="Class / Status *">الفصل / الحالة *</label><select id="eStuCls"></select></div>
       <div class="ff"><label data-ar="اسم ولي الأمر" data-en="Guardian Name">اسم ولي الأمر</label><input type="text" id="eStuPar" placeholder="الاسم الكامل"></div>
       <div class="ff"><label data-ar="جوال ولي الأمر" data-en="Guardian Mobile">جوال ولي الأمر</label><input type="tel" id="eStuPhone" placeholder="05xxxxxxxx"></div>
@@ -3047,12 +3047,13 @@ function addAcademicYear(){
 // ════════════════════════════════════════════
 // FILL SELECTS
 // ════════════════════════════════════════════
-function syncStudentClassOptions(selectedClass=null){
+function syncStudentClassOptions(selectedClass=null,selectedProgram=''){
   const programSelect=document.getElementById('eStuProgram');
   const classSelect=document.getElementById('eStuCls');
   if(!programSelect||!classSelect)return;
   const programs=allowedPrograms();
-  const program=programs.includes(programSelect.value)?programSelect.value:(programs.includes(db.activeProgram)?db.activeProgram:(programs[0]||'national'));
+  const requestedProgram=selectedProgram||programSelect.value;
+  const program=programs.includes(requestedProgram)?requestedProgram:(programs.includes(db.activeProgram)?db.activeProgram:(programs[0]||'national'));
   programSelect.innerHTML=programs.map(item=>`<option value="${item}" ${item===program?'selected':''}>${programLabel(item)}</option>`).join('');
   const previous=selectedClass===null?classSelect.value:selectedClass;
   const classes=Object.values(db.classes||{}).map(normalizeClassScope).filter(cls=>cls.program===program&&allowedGrades(program).includes(classGrade(cls))).sort((a,b)=>className(a).localeCompare(className(b),LANG==='ar'?'ar':'en'));
@@ -3907,7 +3908,7 @@ async function saveStu(){
   const data={...(previous||{}),id:id||('s'+rnd()),name,
     schoolId:document.getElementById('eStuSid').value.trim(),
     classId:cls,
-    program:selectedClass?.program||requestedProgram,
+    program:requestedProgram,
     gradeLevel:selectedClass?classGrade(selectedClass):(studentCurrentGrade(previous)||''),
     enrollmentStatus:cls?'active':'left_school',
     leftSchoolAt:cls?null:(previous?.leftSchoolAt||today()),
@@ -3949,8 +3950,7 @@ function editStu(id){
   ['eStuId','eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach((fid,i)=>{
     document.getElementById(fid).value=[s.id,s.name,s.schoolId||'',s.parent||'',s.parentPhone||'',s.parentEmail||''][i];
   });
-  document.getElementById('eStuProgram').value=studentCurrentProgram(s);
-  syncStudentClassOptions(s.classId||'__no_class__');
+  syncStudentClassOptions(s.classId||'__no_class__',studentCurrentProgram(s));
   openM('mStu',true);
 }
 function delStu(id){if(!hasPermission('students_delete')||!manageableStudents().some(s=>s.id===id))return;if(!confirm(t('confirmDel')))return;delete db.students[id];save();renderStuTable();renderDashboard();toast(t('deleted'));}
@@ -4862,7 +4862,7 @@ async function openM(id,preserve=false){
   }
   document.getElementById(id).classList.add('open');
   if(preserve)return;
-  if(id==='mStu'){document.getElementById('eStuId').value='';['eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach(f=>document.getElementById(f).value='');document.getElementById('eStuProgram').value=db.activeProgram;syncStudentClassOptions('__select__');}
+  if(id==='mStu'){document.getElementById('eStuId').value='';['eStuName','eStuSid','eStuPar','eStuPhone','eStuEmail'].forEach(f=>document.getElementById(f).value='');syncStudentClassOptions('__select__',db.activeProgram);}
   if(id==='mCls'){['eClsOld','eClsId','eClsNameAr','eClsNameEn'].forEach(f=>document.getElementById(f).value='');syncClassScopeOptions(db.activeProgram);}
   if(id==='mTch'){['eTchId','eTchName','eTchEmail','eTchSubj'].forEach(f=>document.getElementById(f).value='');setUserPasswordFields(true);document.getElementById('eTchRole').value='teacher';document.querySelectorAll('.tch-program,.tch-program-grade').forEach(el=>el.checked=true);syncUserSectionPermissionsFromRole();}
   if(id==='mPassword'){['newPassword','confirmNewPassword'].forEach(f=>document.getElementById(f).value='');document.getElementById('revokeOtherSessions').checked=true;}

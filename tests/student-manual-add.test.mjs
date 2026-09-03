@@ -4,7 +4,8 @@ import vm from 'node:vm';
 
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const functionSource=(name)=>{
-  const start=html.indexOf(`async function ${name}(`);
+  const asyncStart=html.indexOf(`async function ${name}(`);
+  const start=asyncStart>=0?asyncStart:html.indexOf(`function ${name}(`);
   assert.notEqual(start,-1,`${name} must remain present in index.html`);
   const bodyStart=html.indexOf('{',start);
   let depth=0;
@@ -16,9 +17,9 @@ const functionSource=(name)=>{
   throw new Error(`${name} is incomplete in index.html`);
 };
 
-async function runManualAdd({activeProgram='national',requestedProgram='international',flushError=null,changeProgramError=null}={}){
+async function runManualAdd({activeProgram='national',requestedProgram='international',placement='international-4-a',flushError=null,changeProgramError=null}={}){
   const fields={
-    eStuId:{value:''},eStuName:{value:'Manual Test Student'},eStuCls:{value:'international-4-a'},
+    eStuId:{value:''},eStuName:{value:'Manual Test Student'},eStuCls:{value:placement},
     eStuProgram:{value:requestedProgram},eStuSid:{value:'TEST-001'},eStuPar:{value:''},
     eStuPhone:{value:''},eStuEmail:{value:''}
   };
@@ -65,6 +66,10 @@ assert.equal(crossProgram.db.activeProgram,'international');
 assert.equal(crossProgram.calls.close,1);
 assert.deepEqual(crossProgram.calls.toast,['Saved']);
 
+const noClass=await runManualAdd({requestedProgram:'international',placement:'__no_class__'});
+assert.equal(noClass.db.students['smanual-test'].program,'international','a student without a class must retain the selected program');
+assert.equal(noClass.db.students['smanual-test'].classId,'');
+
 const sameProgram=await runManualAdd({activeProgram:'international'});
 assert.equal(sameProgram.calls.changeProgram,0);
 assert.equal(sameProgram.calls.refresh,1,'the current roster must refresh after saving');
@@ -80,5 +85,22 @@ assert.equal(refreshFailed.db.activeProgram,'international');
 assert.equal(refreshFailed.calls.refresh,1,'a secondary refresh failure must fall back to the selected roster');
 assert.equal(refreshFailed.calls.close,1,'a confirmed save must still close the editor');
 assert.deepEqual(refreshFailed.calls.toast,['Saved']);
+
+const editFields={
+  eStuId:{value:''},eStuName:{value:''},eStuSid:{value:''},eStuPar:{value:''},
+  eStuPhone:{value:''},eStuEmail:{value:''}
+};
+const editCalls=[];
+const editContext={
+  db:{students:{s1:{id:'s1',name:'Existing Student',schoolId:'1001',classId:'',program:'international'}}},
+  document:{getElementById:id=>editFields[id]},
+  studentCurrentProgram:student=>student.program,
+  syncStudentClassOptions:(selectedClass,selectedProgram)=>editCalls.push({selectedClass,selectedProgram}),
+  openM:(id,preserve)=>editCalls.push({id,preserve})
+};
+vm.runInNewContext(functionSource('editStu'),editContext);
+editContext.editStu('s1');
+assert.deepEqual(editCalls[0],{selectedClass:'__no_class__',selectedProgram:'international'},'editing must restore the saved student program explicitly');
+assert.deepEqual(editCalls[1],{id:'mStu',preserve:true});
 
 console.log('Manual student roster regression checks passed.');
