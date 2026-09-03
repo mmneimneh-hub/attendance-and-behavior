@@ -2324,17 +2324,30 @@ async function persistState(pending){
   if(!window.neonClient||!user)return;
   const operations=collectStateOperations(pending.base||{},pending.snapshot||{});
   if(!operations.length)return;
+  const verifyRoster=operations.some(operation=>operation.path?.[0]==='academicYears'&&operation.path?.[2]==='students');
   const result=await window.neonClient.rpc('apply_school_state_operations',{
     p_operations:operations,p_updated_by:user?.id||null
   });
   if(result.error)throw result.error;
-  lastConfirmedState=applyStateOperations(lastConfirmedState||pending.base||{},operations);
+  if(verifyRoster){
+    // A successful RPC response only proves that Postgres accepted the call.
+    // Read roster mutations back before showing them as saved so a missing or
+    // overwritten student remains queued for an automatic retry.
+    const confirmed=await readAppSharedState(behaviorStateLoaded);
+    if(!stateOperationsMatch(confirmed.data,operations)){
+      throw delayedSaveError('The student roster change was not confirmed by the database.');
+    }
+    schoolStateContentHash=confirmed.content_hash||'';
+    adoptConfirmedState(confirmed.data,confirmed.updated_at||'');
+  }else{
+    lastConfirmedState=applyStateOperations(lastConfirmedState||pending.base||{},operations);
+    // The server applied these operations on top of the latest row. Force the
+    // next low-frequency metadata check to reconcile any concurrent remote edit.
+    lastServerUpdatedAt='';schoolStateContentHash='';
+  }
   if(pendingStateSave){
     pendingStateSave={base:copyData(lastConfirmedState),snapshot:pendingStateSave.snapshot};
   }
-  // The server applied these operations on top of the latest row. Force the
-  // next low-frequency metadata check to reconcile any concurrent remote edit.
-  lastServerUpdatedAt='';schoolStateContentHash='';
 }
 function save(){
   if(!user||!window.neonClient)return;
@@ -3608,7 +3621,7 @@ function getStuStats(sid,from,to,month,year){
   }
   let p=0,a=0,ae=0,au=0,tardy=0,e=0,ad=[],aed=[],aud=[];
   const permittedClassIds=user?new Set(visibleClasses().map(cls=>cls.id)):null;
-  Object.entries(db.attendance).forEach(([cls,byDate])=>{
+  Object.entries(db.attendance||{}).forEach(([cls,byDate])=>{
     if(permittedClassIds&&!permittedClassIds.has(cls))return;
     Object.entries(byDate).forEach(([date,byStu])=>{
       const dd=new Date(date);
