@@ -2176,8 +2176,9 @@ async function ensureDurableActivityState(){
 }
 function ignoredGenericStatePath(path){
   const joined=path.join('.');
-  return ['activeAcademicYear','activeSemester','activeProgram','classes','students','attendance','notifications','durableActivity'].includes(path[0])
+  return ['activeAcademicYear','activeSemester','activeProgram','classes','students','teachers','attendance','notifications','durableActivity'].includes(path[0])
     || (path[0]==='behaviorSettings'&&!behaviorStateLoaded)
+    || (!behaviorStateLoaded&&/^academicYears\.[^.]+\.semesters\.[^.]+\.behavior(\.|$)/.test(joined))
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.attendance(\.|$)/.test(joined)
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.notifications(\.|$)/.test(joined)
     || /^academicYears\.[^.]+\.semesters\.[^.]+\.behavior\.(violations|positives|audit|nextViolationId|nextPositiveId)(\.|$)/.test(joined);
@@ -2330,17 +2331,18 @@ async function persistState(pending){
   if(!window.neonClient||!user)return;
   const operations=collectStateOperations(pending.base||{},pending.snapshot||{});
   if(!operations.length)return;
-  const verifyRoster=operations.some(operation=>operation.path?.[0]==='academicYears'&&operation.path?.[2]==='students');
+  const rosterOperations=operations.filter(operation=>operation.path?.[0]==='academicYears'&&operation.path?.[2]==='students');
   const result=await window.neonClient.rpc('apply_school_state_operations',{
     p_operations:operations,p_updated_by:user?.id||null
   });
   if(result.error)throw result.error;
-  if(verifyRoster){
+  if(rosterOperations.length){
     // A successful RPC response only proves that Postgres accepted the call.
-    // Read roster mutations back before showing them as saved so a missing or
-    // overwritten student remains queued for an automatic retry.
+    // Read only roster mutations back before showing them as saved. Attendance
+    // responses intentionally omit behavior and compact staff data, so those
+    // unrelated operations must not create a false student-save failure.
     const confirmed=await readAppSharedState(behaviorStateLoaded);
-    if(!stateOperationsMatch(confirmed.data,operations)){
+    if(!stateOperationsMatch(confirmed.data,rosterOperations)){
       throw delayedSaveError('The student roster change was not confirmed by the database.');
     }
     schoolStateContentHash=confirmed.content_hash||'';

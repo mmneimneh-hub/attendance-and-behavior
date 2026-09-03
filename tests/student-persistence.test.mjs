@@ -23,7 +23,7 @@ const rosterOperation={
 };
 
 async function runPersist({operations=[rosterOperation],confirmedMatches=true}={}){
-  const calls={rpc:0,readback:0,adopt:0,apply:0};
+  const calls={rpc:0,readback:0,adopt:0,apply:0,verifiedOperations:[]};
   const confirmed={
     data:{academicYears:{'2026-2027':{students:{[student.id]:student}}}},
     updated_at:'2026-09-03T04:00:00.000Z',content_hash:'confirmed-hash'
@@ -35,7 +35,10 @@ async function runPersist({operations=[rosterOperation],confirmedMatches=true}={
     readAppSharedState:async includeBehavior=>{
       calls.readback+=1;assert.equal(includeBehavior,false);return confirmed;
     },
-    stateOperationsMatch:()=>confirmedMatches,
+    stateOperationsMatch:(state,verifiedOperations)=>{
+      calls.verifiedOperations=verifiedOperations;
+      return confirmedMatches;
+    },
     delayedSaveError:message=>Object.assign(new Error(message),{code:'SAVE_BUSY'}),
     adoptConfirmedState:(data,updatedAt)=>{
       calls.adopt+=1;context.lastConfirmedState=data;context.lastServerUpdatedAt=updatedAt;
@@ -54,6 +57,7 @@ const verified=await runPersist();
 assert.equal(verified.error,null);
 assert.equal(verified.calls.rpc,1);
 assert.equal(verified.calls.readback,1,'student mutations must be read back from Neon');
+assert.deepEqual(verified.calls.verifiedOperations,[rosterOperation],'student verification must exclude unrelated fields omitted from the attendance response');
 assert.equal(verified.calls.adopt,1,'the confirmed server state must replace the speculative baseline');
 assert.equal(verified.calls.apply,0);
 assert.equal(verified.context.schoolStateContentHash,'confirmed-hash');
@@ -73,6 +77,29 @@ assert.equal(ordinary.calls.readback,0,'ordinary state saves must not add a full
 assert.equal(ordinary.calls.apply,1);
 assert.equal(ordinary.context.schoolStateContentHash,'');
 assert.equal(ordinary.context.lastServerUpdatedAt,'');
+
+const mixed=await runPersist({operations:[rosterOperation,settingsOperation]});
+assert.equal(mixed.error,null,'an unrelated generic operation must not make a confirmed student edit appear to fail');
+assert.deepEqual(mixed.calls.verifiedOperations,[rosterOperation]);
+
+const behaviorPathContext={behaviorStateLoaded:false,sameStateValue:()=>false};
+vm.runInNewContext(functionSource('ignoredGenericStatePath'),behaviorPathContext);
+assert.equal(
+  behaviorPathContext.ignoredGenericStatePath(['teachers']),
+  true,
+  'generic roster saves must not overwrite the separately managed staff subject directory'
+);
+assert.equal(
+  behaviorPathContext.ignoredGenericStatePath(['academicYears','2026-2027','semesters','1','behavior']),
+  true,
+  'attendance-only saves must ignore the unloaded behavior root instead of writing an empty behavior object'
+);
+behaviorPathContext.behaviorStateLoaded=true;
+assert.equal(
+  behaviorPathContext.ignoredGenericStatePath(['academicYears','2026-2027','semesters','1','behavior']),
+  false,
+  'the behavior root remains available after the full behavior state is loaded'
+);
 
 assert.match(
   html,
