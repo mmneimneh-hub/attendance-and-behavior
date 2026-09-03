@@ -2190,8 +2190,8 @@ function mergeableIdCollection(left,right){
   };
   return !!((left||[]).length||(right||[]).length)&&valid(left)&&valid(right);
 }
-function collectStateOperations(base,next,path=[],operations=[]){
-  if(ignoredGenericStatePath(path))return operations;
+function collectStateOperations(base,next,path=[],operations=[],shouldIgnore=ignoredGenericStatePath){
+  if(shouldIgnore(path))return operations;
   if(sameStateValue(base,next))return operations;
   if(Array.isArray(base)&&Array.isArray(next)&&mergeableIdCollection(base,next)){
     const before=new Map(base.map(item=>[String(item.id),item]));
@@ -2203,10 +2203,10 @@ function collectStateOperations(base,next,path=[],operations=[]){
   if(isPlainStateObject(base)&&isPlainStateObject(next)){
     const keys=new Set([...Object.keys(base),...Object.keys(next)]);
     keys.forEach(key=>{
-      if(ignoredGenericStatePath([...path,key]))return;
+      if(shouldIgnore([...path,key]))return;
       if(!Object.prototype.hasOwnProperty.call(next,key))operations.push({type:'delete',path:[...path,key]});
       else if(!Object.prototype.hasOwnProperty.call(base,key))operations.push({type:'set',path:[...path,key],value:copyStateValue(next[key])});
-      else collectStateOperations(base[key],next[key],[...path,key],operations);
+      else collectStateOperations(base[key],next[key],[...path,key],operations,shouldIgnore);
     });
     return operations;
   }
@@ -2300,20 +2300,19 @@ function commitSharedStateMutation(transform,verify=null){
           const current=await readSharedState();
           const next=transform(copyData(current.data),current);
           if(!next)return current;
-          const previousTime=Date.parse(current.updated_at)||0;
-          const nextUpdatedAt=new Date(Math.max(Date.now(),previousTime+1)).toISOString();
-          const result=await window.neonClient.from('school_state').update({
-            data:next,updated_at:nextUpdatedAt,updated_by:user?.id||null
-          }).eq('singleton',true).eq('updated_at',current.updated_at).select('updated_at,updated_by');
-          if(result.error)throw result.error;
-          const updated=sharedStateRow(result);
-          if(updated){
-            const confirmed=next;
-            if(verify&&!verify(confirmed))throw delayedSaveError('The saved data could not be verified yet.');
-            adoptConfirmedState(confirmed,updated.updated_at||nextUpdatedAt);
-            return updated;
+          const operations=collectStateOperations(current.data,next,[],[],()=>false);
+          if(!operations.length)return current;
+          if(operations.some(operation=>!Array.isArray(operation.path)||!operation.path.length)){
+            throw new Error('Root state replacements are not allowed');
           }
-          lastError=delayedSaveError('The shared record changed while saving.');
+          const result=await window.neonClient.rpc('apply_school_state_operations',{
+            p_operations:operations,p_updated_by:user?.id||null
+          });
+          if(result.error)throw result.error;
+          const confirmed=await readAppSharedState(true);
+          if(verify&&!verify(confirmed.data))throw delayedSaveError('The saved data could not be verified yet.');
+          adoptConfirmedState(confirmed.data,confirmed.updated_at||'');
+          return confirmed;
         }catch(error){
           lastError=error;
           if(!retryableSharedStateError(error)||attempt===11)throw error;

@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const protectionSql=readFileSync(new URL('../database/2026-09-03-protect-school-state-writes.sql',import.meta.url),'utf8');
 const functionSource=name=>{
   const asyncStart=html.indexOf(`async function ${name}(`);
   const start=asyncStart>=0?asyncStart:html.indexOf(`function ${name}(`);
@@ -100,6 +101,19 @@ assert.equal(
   false,
   'the behavior root remains available after the full behavior state is loaded'
 );
+
+assert.doesNotMatch(
+  html,
+  /from\('school_state'\)\.update/,
+  'the browser must never replace the shared state row directly'
+);
+assert.doesNotMatch(html,/replace_school_state_if_unchanged/,'shared mutations must not require full-document replacement');
+assert.match(functionSource('commitSharedStateMutation'),/collectStateOperations\(current\.data,next,\[\],\[\],\(\)=>false\)/,'durable activity writes must be converted into granular operations');
+assert.match(functionSource('commitSharedStateMutation'),/rpc\('apply_school_state_operations'/,'durable activity writes must use the granular database function');
+assert.match(functionSource('commitSharedStateMutation'),/!operation\.path\.length/,'the client must reject root replacement operations');
+assert.match(protectionSql,/ALTER FUNCTION public\.apply_school_state_operations\(jsonb, text\) SECURITY DEFINER/,'the granular state function must retain controlled database write privileges');
+assert.match(protectionSql,/DROP POLICY IF EXISTS school_state_manage/,'the broad direct-write policy must be removed');
+assert.match(protectionSql,/REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public\.school_state FROM authenticated/,'authenticated browsers must not have direct row-write privileges');
 
 assert.match(
   html,

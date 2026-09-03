@@ -240,7 +240,8 @@ CREATE POLICY school_state_read ON school_state
   FOR SELECT TO authenticated
   USING (app_private.current_app_role() IS NOT NULL);
 DROP POLICY IF EXISTS school_state_manage ON school_state;
-CREATE POLICY school_state_manage ON school_state
-  FOR ALL TO authenticated
-  USING (app_private.current_app_role() IN ('admin','principal','teacher','supervisor'))
-  WITH CHECK (app_private.current_app_role() IN ('admin','principal','teacher','supervisor'));
+ALTER FUNCTION public.apply_school_state_operations(jsonb, text) SECURITY DEFINER;
+REVOKE ALL ON FUNCTION public.apply_school_state_operations(jsonb, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.apply_school_state_operations(jsonb, text) TO authenticated;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON school_state FROM authenticated;
+GRANT SELECT ON school_state TO authenticated;
